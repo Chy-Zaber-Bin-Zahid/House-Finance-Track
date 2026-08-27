@@ -5,7 +5,8 @@ export default defineConfig({
   out: "./db/migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? "postgres://house:house@localhost:5437/house",
+    /* No fallback: a migration pointed at a default nobody chose is worse than one that refuses to run. */
+    url: process.env.DATABASE_URL ?? "",
   },
   strict: true,
 });
