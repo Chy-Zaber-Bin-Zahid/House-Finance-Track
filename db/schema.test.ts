@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { expectRejection, testDb, truncateAll } from "@/test/db";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { expectRejection, testDb, acquireSuiteLock, releaseSuiteLock, truncateAll } from "@/test/db";
 import { seed, SEED_YEAR } from "./seed";
 import { billEntries, rentEntries, tenancies, tenants, units } from "./schema";
 import type { Database } from "./client";
@@ -8,11 +8,16 @@ import type { Database } from "./client";
 const { db, close } = testDb();
 const database = db as unknown as Database;
 
+beforeAll(async () => {
+  await acquireSuiteLock(db);
+});
+
 beforeEach(async () => {
   await truncateAll(db);
 });
 
 afterAll(async () => {
+  await releaseSuiteLock(db);
   await close();
 });
 

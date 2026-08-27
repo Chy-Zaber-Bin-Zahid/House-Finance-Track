@@ -1,7 +1,15 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type SheetResponse, type StoredDocument, type Tenancy, type Tenant, type Unit } from "@/lib/api";
+import {
+  api,
+  type Role,
+  type SheetResponse,
+  type StoredDocument,
+  type Tenancy,
+  type Tenant,
+  type Unit,
+} from "@/lib/api";
 
 /** Server state, all of it, owned by the query cache. */
 
@@ -125,9 +133,25 @@ export function useUnlockYear() {
   });
 }
 
-export function useMe() {
+export type YearState = {
+  year: number;
+  isCurrent: boolean;
+  editable: boolean;
+  canUnlock: boolean;
+};
+
+/**
+ * Who the browser is talking as, and whether the server considers the given
+ * year editable. The year is asked for rather than assumed, so the answer comes
+ * from the server's clock rather than the device's.
+ */
+export function useMe(year?: number) {
   return useQuery({
-    queryKey: ["me"],
-    queryFn: () => api<{ actor: { email: string; role: string; unlockedYear: number | null } | null }>("/api/me"),
+    queryKey: ["me", year ?? null],
+    queryFn: () =>
+      api<{
+        actor: { email: string; role: Role; unlockedYear: number | null } | null;
+        year: YearState;
+      }>(`/api/me${year === undefined ? "" : `?year=${year}`}`),
   });
 }

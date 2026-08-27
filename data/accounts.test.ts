@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { accounts } from "@/db/schema";
-import { testDb, truncateAll } from "@/test/db";
+import { testDb, acquireSuiteLock, releaseSuiteLock, truncateAll } from "@/test/db";
 import type { Database } from "@/db/client";
 import { findByEmail, register, setPassword, signIn } from "./accounts";
 import { MIN_PASSWORD_LENGTH, WeakPassword, hashPassword, verifyPassword } from "./passwords";
@@ -13,12 +13,17 @@ const database = db as unknown as Database;
 const GOOD = "a-long-enough-password";
 const ADDRESS = "127.0.0.1";
 
+beforeAll(async () => {
+  await acquireSuiteLock(db);
+});
+
 beforeEach(async () => {
   await truncateAll(db);
   clearAllWindows();
 });
 
 afterAll(async () => {
+  await releaseSuiteLock(db);
   await close();
 });
 

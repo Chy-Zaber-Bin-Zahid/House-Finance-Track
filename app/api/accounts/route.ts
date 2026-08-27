@@ -2,7 +2,6 @@ import { register } from "@/data/accounts";
 import { listAccounts } from "@/data/approvals";
 import { requireOwner } from "@/data/guard";
 import { addressOf, currentActor, toResponse } from "@/data/http";
-import { WeakPassword } from "@/data/passwords";
 import { consume, REGISTER_PER_ADDRESS } from "@/data/rate-limit";
 import { db } from "@/db/client";
 
@@ -21,9 +20,6 @@ export async function POST(request: Request) {
     await register(db, body.email, body.password);
     return Response.json({ ok: true });
   } catch (error) {
-    if (error instanceof WeakPassword) {
-      return Response.json({ error: error.message }, { status: 400 });
-    }
     return toResponse(error);
   }
 }

@@ -10,4 +10,8 @@ export async function register(): Promise<void> {
 
   const outcome = await seedOwner(db);
   if (outcome === "created") console.log("Created the owner account from the environment.");
+
+  /* Sessions that expired while the server was down have no reason to persist. */
+  const { purgeExpiredSessions } = await import("@/data/session");
+  await purgeExpiredSessions(db);
 }

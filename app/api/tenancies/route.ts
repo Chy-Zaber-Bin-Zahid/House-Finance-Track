@@ -1,7 +1,6 @@
 import { requireApproved, requireEditor } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
-import { createTenancy, listTenancies, OverlappingTenancy } from "@/data/property";
-import { BackwardsPeriod } from "@/data/period";
+import { createTenancy, listTenancies } from "@/data/property";
 import { db } from "@/db/client";
 
 type Month = { year: number; month: number };
@@ -27,7 +26,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    requireEditor(await currentActor());
+    const actor = requireEditor(await currentActor());
     const body = (await request.json()) as {
       unitId?: unknown;
       tenantId?: unknown;
@@ -45,21 +44,21 @@ export async function POST(request: Request) {
       return Response.json({ error: "A tenancy needs a unit, a tenant, and a start month." }, { status: 400 });
     }
 
-    const tenancy = await createTenancy(db, {
-      unitId: body.unitId,
-      tenantId: body.tenantId,
-      start: body.start,
-      end: (body.end as Month | null) ?? null,
-      expectedRent: typeof body.expectedRent === "number" ? body.expectedRent : 0,
-    });
-    return Response.json({ tenancy }, { status: 201 });
+    const tenancy = await createTenancy(
+      db,
+      {
+        unitId: body.unitId,
+        tenantId: body.tenantId,
+        start: body.start,
+        end: (body.end as Month | null) ?? null,
+        expectedRent: typeof body.expectedRent === "number" ? body.expectedRent : 0,
+      },
+      actor,
+    );
+    /* The raw row, not the enriched shape GET returns — named differently so a
+     * caller cannot reach for fields this response never carried. */
+    return Response.json({ created: { id: tenancy.id, unitId: tenancy.unitId, tenantId: tenancy.tenantId } }, { status: 201 });
   } catch (error) {
-    if (error instanceof BackwardsPeriod) {
-      return Response.json({ error: error.message }, { status: 400 });
-    }
-    if (error instanceof OverlappingTenancy) {
-      return Response.json({ error: error.message }, { status: 409 });
-    }
     return toResponse(error);
   }
 }

@@ -1,6 +1,10 @@
 import { cookies } from "next/headers";
 import { db } from "@/db/client";
 import { AccessDenied, NotFound, StillReferenced } from "./errors";
+import { UploadTooLarge } from "./files";
+import { WeakPassword } from "./passwords";
+import { BackwardsPeriod } from "./period";
+import { OverlappingTenancy } from "./property";
 import { verifySession, type Actor } from "./session";
 
 export const SESSION_COOKIE = "house_session";
@@ -39,8 +43,13 @@ const DENIAL_STATUS: Record<AccessDenied["reason"], number> = {
 };
 
 /**
- * Turns a data-layer refusal into a response. Anything not deliberately
- * refused becomes a bare 500 rather than leaking its reason to the caller.
+ * Turns a data-layer refusal into a response. Every deliberate refusal in the
+ * app maps here, in one place — a route that grows a new domain error gets the
+ * right status without each handler remembering to catch it, and the mapping
+ * cannot drift between twenty copies.
+ *
+ * Anything not deliberately refused becomes a bare 500 rather than leaking its
+ * reason to the caller.
  */
 export function toResponse(error: unknown): Response {
   if (error instanceof AccessDenied) {
@@ -52,8 +61,14 @@ export function toResponse(error: unknown): Response {
   if (error instanceof NotFound) {
     return Response.json({ error: error.message }, { status: 404 });
   }
-  if (error instanceof StillReferenced) {
+  if (error instanceof StillReferenced || error instanceof OverlappingTenancy) {
     return Response.json({ error: error.message }, { status: 409 });
+  }
+  if (error instanceof WeakPassword || error instanceof BackwardsPeriod) {
+    return Response.json({ error: error.message }, { status: 400 });
+  }
+  if (error instanceof UploadTooLarge) {
+    return Response.json({ error: error.message }, { status: 413 });
   }
   console.error(error);
   return Response.json({ error: "Something went wrong." }, { status: 500 });

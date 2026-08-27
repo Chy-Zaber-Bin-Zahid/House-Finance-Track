@@ -1,6 +1,6 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { documents } from "@/db/schema";
-import { testDb, truncateAll } from "@/test/db";
+import { testDb, acquireSuiteLock, releaseSuiteLock, truncateAll } from "@/test/db";
 import type { Database } from "@/db/client";
 import { NotFound } from "./errors";
 import {
@@ -19,6 +19,10 @@ const { db, close } = testDb();
 const database = db as unknown as Database;
 let store: MemoryStore;
 
+beforeAll(async () => {
+  await acquireSuiteLock(db);
+});
+
 beforeEach(async () => {
   await truncateAll(db);
   store = new MemoryStore();
@@ -30,6 +34,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
+  await releaseSuiteLock(db);
   await close();
 });
 

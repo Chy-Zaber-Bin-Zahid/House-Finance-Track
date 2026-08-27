@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { accounts } from "@/db/schema";
-import { testDb, truncateAll } from "@/test/db";
+import { testDb, acquireSuiteLock, releaseSuiteLock, truncateAll } from "@/test/db";
 import type { Database } from "@/db/client";
 import { seedOwner } from "./owner";
 import { verifyPassword } from "./passwords";
@@ -10,12 +10,17 @@ const { db, close } = testDb();
 const database = db as unknown as Database;
 const ENV = { email: "owner@example.com", password: "the-owners-long-password" };
 
+beforeAll(async () => {
+  await acquireSuiteLock(db);
+});
+
 beforeEach(async () => {
   await truncateAll(db);
   vi.restoreAllMocks();
 });
 
 afterAll(async () => {
+  await releaseSuiteLock(db);
   await close();
 });
 

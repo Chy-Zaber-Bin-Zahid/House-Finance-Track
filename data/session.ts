@@ -1,5 +1,5 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { createHash, randomBytes } from "node:crypto";
+import { and, eq, gt, lt } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import { accounts, sessions } from "@/db/schema";
 
@@ -36,13 +36,6 @@ export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function constantTimeEquals(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
-}
-
 export function sessionExpiry(now: Date = new Date()): Date {
   return new Date(now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000);
 }
@@ -74,6 +67,15 @@ export async function verifySession(db: Database, token: string | undefined): Pr
     .limit(1);
 
   return rows[0] ?? null;
+}
+
+/**
+ * Drops sessions whose expiry has passed. `verifySession` already refuses them,
+ * so this is housekeeping rather than a control — without it the table only
+ * ever grows.
+ */
+export async function purgeExpiredSessions(db: Database): Promise<void> {
+  await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
 }
 
 export async function destroySession(db: Database, token: string | undefined): Promise<void> {

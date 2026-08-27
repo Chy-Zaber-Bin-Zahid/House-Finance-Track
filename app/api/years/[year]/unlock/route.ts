@@ -9,8 +9,8 @@ export async function POST(_request: Request, context: { params: Promise<{ year:
     const year = Number((await context.params).year);
     if (!Number.isInteger(year)) return Response.json({ error: "That is not a year." }, { status: 400 });
 
-    await unlockYear(db, actor, year);
-    return Response.json({ ok: true, unlockedYear: year });
+    const { replaced } = await unlockYear(db, actor, year);
+    return Response.json({ ok: true, unlockedYear: year, relocked: replaced });
   } catch (error) {
     return toResponse(error);
   }

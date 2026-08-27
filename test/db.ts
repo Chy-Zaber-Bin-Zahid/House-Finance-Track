@@ -24,6 +24,23 @@ const TABLES = [
   "accounts",
 ] as const;
 
+/**
+ * A lock the whole suite holds, so two runs against one database queue instead
+ * of truncating each other's rows mid-test. `fileParallelism: false` only
+ * orders files within a single run; nothing stopped a second `npm test`, or CI
+ * alongside a developer, from producing failures that pointed at the wrong
+ * change.
+ */
+const SUITE_LOCK = 8_027_2026;
+
+export async function acquireSuiteLock(db: ReturnType<typeof testDb>["db"]): Promise<void> {
+  await db.execute(sql.raw(`SELECT pg_advisory_lock(${SUITE_LOCK})`));
+}
+
+export async function releaseSuiteLock(db: ReturnType<typeof testDb>["db"]): Promise<void> {
+  await db.execute(sql.raw(`SELECT pg_advisory_unlock(${SUITE_LOCK})`));
+}
+
 export async function truncateAll(db: ReturnType<typeof testDb>["db"]): Promise<void> {
   await db.execute(
     sql.raw(`TRUNCATE TABLE ${TABLES.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`),

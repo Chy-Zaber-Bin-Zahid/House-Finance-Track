@@ -24,8 +24,11 @@ type MonthResponse = {
 
 export function MonthScreen({ year, month }: { year: number; month: number }) {
   const router = useRouter();
-  const { data: me } = useMe();
+  const { data: me } = useMe(year);
   const setEntry = useSetEntry();
+  /* Which row's last save failed, so the error lands on the input the person
+   * edited rather than only in a banner above a grid of many rows. */
+  const [failed, setFailed] = useState<string | null>(null);
 
   const { data, isPending, error } = useQuery({
     queryKey: ["month", year, month],
@@ -33,9 +36,8 @@ export function MonthScreen({ year, month }: { year: number; month: number }) {
   });
 
   const currency = HOUSE_CONFIG.currency;
-  const currentYear = new Date().getFullYear();
+  const editable = me?.year?.editable ?? false;
   const canEdit = me?.actor?.role === "owner" || me?.actor?.role === "super_admin";
-  const editable = canEdit && (year === currentYear || me?.actor?.unlockedYear === year);
 
   if (isPending) return <Loading label="Loading the month…" />;
   if (error) {
@@ -124,11 +126,24 @@ export function MonthScreen({ year, month }: { year: number; month: number }) {
                   cell={data.cells.bills[bill.id]}
                   placeholder="0"
                   editable={editable}
+                  failed={failed === `bill:${bill.id}`}
                   onAmount={(amount) =>
-                    setEntry.mutate({ kind: "bill", targetId: bill.id, year, month, amount })
+                    setEntry.mutate(
+                      { kind: "bill", targetId: bill.id, year, month, amount },
+                      {
+                        onError: () => setFailed(`bill:${bill.id}`),
+                        onSuccess: () => setFailed(null),
+                      },
+                    )
                   }
                   onStatus={(status) =>
-                    setEntry.mutate({ kind: "bill", targetId: bill.id, year, month, status })
+                    setEntry.mutate(
+                      { kind: "bill", targetId: bill.id, year, month, status },
+                      {
+                        onError: () => setFailed(`bill:${bill.id}`),
+                        onSuccess: () => setFailed(null),
+                      },
+                    )
                   }
                 />
               ))
@@ -160,11 +175,24 @@ export function MonthScreen({ year, month }: { year: number; month: number }) {
                     cell={data.cells.rent[tenancy.unitId] ?? { amount: 0, status: "upcoming" }}
                     placeholder={String(tenancy.expectedRent || 0)}
                     editable={editable}
+                    failed={failed === `rent:${tenancy.id}`}
                     onAmount={(amount) =>
-                      setEntry.mutate({ kind: "rent", targetId: tenancy.id, year, month, amount })
+                      setEntry.mutate(
+                        { kind: "rent", targetId: tenancy.id, year, month, amount },
+                        {
+                          onError: () => setFailed(`rent:${tenancy.id}`),
+                          onSuccess: () => setFailed(null),
+                        },
+                      )
                     }
                     onStatus={(status) =>
-                      setEntry.mutate({ kind: "rent", targetId: tenancy.id, year, month, status })
+                      setEntry.mutate(
+                        { kind: "rent", targetId: tenancy.id, year, month, status },
+                        {
+                          onError: () => setFailed(`rent:${tenancy.id}`),
+                          onSuccess: () => setFailed(null),
+                        },
+                      )
                     }
                   />
                 );
@@ -207,6 +235,7 @@ function EntryRow({
   cell,
   placeholder,
   editable,
+  failed = false,
   boldLabel = false,
   onAmount,
   onStatus,
@@ -215,6 +244,8 @@ function EntryRow({
   cell: Cell;
   placeholder: string;
   editable: boolean;
+  /** This row's last save was refused; its input still shows the unsaved value. */
+  failed?: boolean;
   boldLabel?: boolean;
   onAmount: (amount: number) => void;
   onStatus: (status: "paid" | "upcoming") => void;
@@ -228,7 +259,8 @@ function EntryRow({
       </span>
       <Field
         inputMode="numeric"
-        className="num min-w-0 flex-1"
+        aria-invalid={failed || undefined}
+        className={cn("num min-w-0 flex-1", failed && "border-amber bg-amber-tint")}
         value={draft}
         placeholder={placeholder}
         disabled={!editable}

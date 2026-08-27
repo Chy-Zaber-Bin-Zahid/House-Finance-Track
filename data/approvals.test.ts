@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { accounts, sessions } from "@/db/schema";
-import { testDb, truncateAll } from "@/test/db";
+import { testDb, acquireSuiteLock, releaseSuiteLock, truncateAll } from "@/test/db";
 import type { Database } from "@/db/client";
 import { approve, listAccounts, reject, resetPassword, setRole } from "./approvals";
 import { NotFound } from "./errors";
@@ -12,11 +12,16 @@ import { createSessionToken, hashToken, sessionExpiry, verifySession } from "./s
 const { db, close } = testDb();
 const database = db as unknown as Database;
 
+beforeAll(async () => {
+  await acquireSuiteLock(db);
+});
+
 beforeEach(async () => {
   await truncateAll(db);
 });
 
 afterAll(async () => {
+  await releaseSuiteLock(db);
   await close();
 });
 

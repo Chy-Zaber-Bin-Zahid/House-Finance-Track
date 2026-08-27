@@ -94,13 +94,23 @@ export function objectStore(): ObjectStore {
   const { R2_BUCKET, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY } = process.env;
   if (R2_BUCKET && R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
     store = new R2Store(R2_BUCKET, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY);
+  } else if (process.env.NODE_ENV === "production" && process.env.ALLOW_MEMORY_FILES !== "true") {
+    /*
+     * Degrading quietly here would keep tenant identity documents in RAM and
+     * lose them on the next restart, while every upload still returned 201.
+     * Refuse to start that way.
+     */
+    throw new Error(
+      "R2 is not configured. Set R2_BUCKET, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY. " +
+        "To run `next start` locally without R2, set ALLOW_MEMORY_FILES=true and accept that uploaded " +
+        "files live in memory and are lost on restart.",
+    );
   } else {
     /*
      * No credentials configured. Files are kept in memory so the app runs and
-     * every access rule still applies; they do not survive a restart, which is
-     * loud enough to notice before it matters.
+     * every access rule still applies; they do not survive a restart.
      */
-    console.warn("R2 is not configured. Uploaded files will not survive a restart.");
+    console.warn("R2 is not configured. Uploaded files are kept in memory and will not survive a restart.");
     store = new MemoryStore();
   }
   return store;

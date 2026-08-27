@@ -1,5 +1,5 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { testDb, truncateAll } from "@/test/db";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { testDb, acquireSuiteLock, releaseSuiteLock, truncateAll } from "@/test/db";
 import type { Database } from "@/db/client";
 import { seed, SEED_YEAR } from "@/db/seed";
 import { StillReferenced } from "./errors";
@@ -22,11 +22,16 @@ import { createTenancy, createTenant, createUnit, endTenancy } from "./property"
 const { db, close } = testDb();
 const database = db as unknown as Database;
 
+beforeAll(async () => {
+  await acquireSuiteLock(db);
+});
+
 beforeEach(async () => {
   await truncateAll(db);
 });
 
 afterAll(async () => {
+  await releaseSuiteLock(db);
   await close();
 });
 

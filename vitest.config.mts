@@ -1,5 +1,13 @@
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+
+/*
+ * `server-only` exists to make a bundler fail when a server module is pulled
+ * into a client bundle. Tests import those modules deliberately, so it is
+ * stubbed here rather than the modules being weakened to accommodate testing.
+ */
+const serverOnlyStub = fileURLToPath(new URL("./test/stubs/server-only.ts", import.meta.url));
 
 /**
  * Two projects, because the suite proves two different things. Pure
@@ -7,11 +15,11 @@ import { defineConfig } from "vitest/config";
  * without one. Splitting them keeps the fast tests fast.
  */
 export default defineConfig({
-  resolve: { tsconfigPaths: true },
+  resolve: { tsconfigPaths: true, alias: { "server-only": serverOnlyStub } },
   test: {
     projects: [
       {
-        resolve: { tsconfigPaths: true },
+        resolve: { tsconfigPaths: true, alias: { "server-only": serverOnlyStub } },
         test: {
           name: "server",
           environment: "node",

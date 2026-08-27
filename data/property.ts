@@ -2,6 +2,8 @@ import { asc, eq } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import { rentEntries, tenancies, tenants, units } from "@/db/schema";
 import { NotFound, StillReferenced } from "./errors";
+import { requireWritableYear } from "./guard";
+import type { Actor } from "./session";
 import { MONTH_NAMES } from "@/lib/seed";
 import { BackwardsPeriod, fromPeriod, ordinal, toPeriod, type MonthRef } from "./period";
 
@@ -95,6 +97,23 @@ export type TenancyInput = {
   expectedRent: number;
 };
 
+/**
+ * Which years a period touches, so a write that moves one can be checked
+ * against the year lock.
+ *
+ * The line this draws: changing *which months hold money, or whose they are*
+ * is year-scoped and needs the year unlocked. Renaming a unit, a tenant, or a
+ * bill type is not — an identity correction should apply everywhere, including
+ * closed years, which is the point of it being one record rather than a copy
+ * per year.
+ */
+function yearsTouched(start: MonthRef, end: MonthRef | null): number[] {
+  const last = end ? end.year : start.year;
+  const years: number[] = [];
+  for (let year = start.year; year <= last; year += 1) years.push(year);
+  return years;
+}
+
 export class OverlappingTenancy extends Error {
   constructor() {
     super("That unit already has a tenancy covering those months. End the current one first.");
@@ -102,7 +121,11 @@ export class OverlappingTenancy extends Error {
   }
 }
 
-export async function createTenancy(db: Database, input: TenancyInput) {
+export async function createTenancy(db: Database, input: TenancyInput, actor?: Actor) {
+  /* Opening a tenancy decides which months a unit collects in — year-scoped. */
+  if (actor) {
+    for (const year of yearsTouched(input.start, input.end)) requireWritableYear(actor, year);
+  }
   try {
     const [row] = await db
       .insert(tenancies)
@@ -122,11 +145,24 @@ export async function createTenancy(db: Database, input: TenancyInput) {
 }
 
 /** Ending a tenancy leaves the tenant and every amount recorded under it intact. */
-export async function endTenancy(db: Database, id: number, end: MonthRef) {
+export async function endTenancy(db: Database, id: number, end: MonthRef, actor?: Actor) {
   const [existing] = await db.select().from(tenancies).where(eq(tenancies.id, id)).limit(1);
   if (!existing) throw new NotFound("No such tenancy.");
 
-  const { start } = fromPeriod(existing.period);
+  const { start, end: previousEnd } = fromPeriod(existing.period);
+
+  /*
+   * Both the years it covered and the years it will cover: shortening a
+   * tenancy blanks cells in the years it stops covering, which is a change to
+   * those years even though the request never names them.
+   */
+  if (actor) {
+    const affected = new Set([
+      ...yearsTouched(start, previousEnd),
+      ...yearsTouched(start, end),
+    ]);
+    for (const year of affected) requireWritableYear(actor, year);
+  }
 
   /*
    * Rent recorded after the new end month would keep counting toward the year
@@ -161,7 +197,13 @@ export async function endTenancy(db: Database, id: number, end: MonthRef) {
   }
 }
 
-export async function deleteTenancy(db: Database, id: number) {
+export async function deleteTenancy(db: Database, id: number, actor?: Actor) {
+  if (actor) {
+    const [existing] = await db.select().from(tenancies).where(eq(tenancies.id, id)).limit(1);
+    if (!existing) throw new NotFound("No such tenancy.");
+    const { start, end } = fromPeriod(existing.period);
+    for (const year of yearsTouched(start, end)) requireWritableYear(actor, year);
+  }
   await guardReferences("tenancy", async () => {
     const deleted = await db.delete(tenancies).where(eq(tenancies.id, id)).returning();
     if (deleted.length === 0) throw new NotFound("No such tenancy.");

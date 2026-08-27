@@ -1,7 +1,6 @@
 import { approve, reject, resetPassword, setRole } from "@/data/approvals";
 import { requireOwner } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
-import { WeakPassword } from "@/data/passwords";
 import { db } from "@/db/client";
 
 type Body = {
@@ -47,9 +46,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     return Response.json({ ok: true });
   } catch (error) {
-    if (error instanceof WeakPassword) {
-      return Response.json({ error: error.message }, { status: 400 });
-    }
     return toResponse(error);
   }
 }

@@ -27,17 +27,28 @@ export function DocumentPanel({
     if (!files || files.length === 0) return;
     setBusy(true);
     setError(null);
+    const chosen = Array.from(files);
+    let done = 0;
     try {
-      for (const file of Array.from(files)) {
+      for (const file of chosen) {
         const form = new FormData();
         form.set("file", file);
         form.set("tenantId", String(tenantId));
         form.set("kind", "document");
         await api("/api/files", { method: "POST", body: form });
+        done += 1;
+        /* Reflect each file as it lands. Invalidating only after the whole
+         * batch hid the ones that succeeded when a later file failed, and left
+         * the user likely to re-upload them. */
+        invalidate("documents");
       }
-      invalidate("documents");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "That upload did not work.");
+      const reason = err instanceof ApiError ? err.message : "That upload did not work.";
+      setError(
+        done > 0
+          ? `${reason} ${done} of ${chosen.length} ${done === 1 ? "file was" : "files were"} saved; the rest were not.`
+          : reason,
+      );
     } finally {
       setBusy(false);
     }

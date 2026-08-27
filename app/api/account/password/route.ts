@@ -1,7 +1,6 @@
 import { changePassword } from "@/data/accounts";
 import { requireApproved } from "@/data/guard";
 import { currentActor, sessionToken, toResponse } from "@/data/http";
-import { WeakPassword } from "@/data/passwords";
 import { consume, PASSWORD_CHANGE_PER_ACCOUNT } from "@/data/rate-limit";
 import { destroyOtherSessions, hashToken } from "@/data/session";
 import { db } from "@/db/client";
@@ -32,9 +31,6 @@ export async function POST(request: Request) {
 
     return Response.json({ ok: true });
   } catch (error) {
-    if (error instanceof WeakPassword) {
-      return Response.json({ error: error.message }, { status: 400 });
-    }
     return toResponse(error);
   }
 }

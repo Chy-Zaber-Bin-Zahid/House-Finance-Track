@@ -3,7 +3,13 @@ import { MONTH_NAMES } from "@/lib/seed";
 import { billTypeTotal, monthBillTotal, monthRentTotal, unitTotal } from "@/lib/sheet";
 
 function escapeCell(value: string | number): string {
-  const text = String(value);
+  let text = String(value);
+  /*
+   * A unit label or bill name starting with one of these is a live formula
+   * when the export is opened in Excel or Sheets. Prefixing an apostrophe
+   * makes the spreadsheet read it as text.
+   */
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

@@ -1,6 +1,6 @@
 import { requireApproved, requireEditor } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
-import { listDocuments, MAX_UPLOAD_BYTES, saveDocument, UploadTooLarge } from "@/data/files";
+import { listDocuments, MAX_UPLOAD_BYTES, saveDocument } from "@/data/files";
 import { db } from "@/db/client";
 
 export async function GET(request: Request) {
@@ -45,9 +45,6 @@ export async function POST(request: Request) {
 
     return Response.json({ document }, { status: 201 });
   } catch (error) {
-    if (error instanceof UploadTooLarge) {
-      return Response.json({ error: error.message }, { status: 413 });
-    }
     return toResponse(error);
   }
 }

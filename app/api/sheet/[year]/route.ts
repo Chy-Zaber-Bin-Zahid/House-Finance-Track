@@ -1,5 +1,6 @@
 import { requireApproved } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
+import { currentYear } from "@/data/guard";
 import { yearSheet, yearsWithData, yearTotals } from "@/data/ledger";
 import { db } from "@/db/client";
 
@@ -16,7 +17,8 @@ export async function GET(_request: Request, context: { params: Promise<{ year: 
       yearTotals(db, year),
       yearsWithData(db),
     ]);
-    return Response.json({ sheet, totals, years });
+    /* The server's year, so the picker does not offer one the browser invented. */
+    return Response.json({ sheet, totals, years, currentYear: currentYear() });
   } catch (error) {
     return toResponse(error);
   }

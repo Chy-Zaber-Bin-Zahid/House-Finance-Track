@@ -17,7 +17,7 @@ export async function unlockYear(
   actor: Actor,
   year: number,
   now: Date = new Date(),
-): Promise<void> {
+): Promise<{ replaced: number | null }> {
   const current = currentYear(now);
 
   if (year === current) {
@@ -31,7 +31,14 @@ export async function unlockYear(
     throw new AccessDenied("year-locked", "A year that has not started yet cannot be unlocked.");
   }
 
+  /*
+   * A session holds one unlock, and a session is many tabs. Report what this
+   * replaced so the tab that asked can say the other year just relocked,
+   * instead of the other tab failing later with a 409 it cannot explain.
+   */
+  const replaced = actor.unlockedYear !== null && actor.unlockedYear !== year ? actor.unlockedYear : null;
   await db.update(sessions).set({ unlockedYear: year }).where(eq(sessions.id, actor.sessionId));
+  return { replaced };
 }
 
 export async function relockYear(db: Database, actor: Actor): Promise<void> {

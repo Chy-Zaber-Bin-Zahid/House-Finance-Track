@@ -133,11 +133,22 @@ export async function openDocument(
   if (!stream) throw new NotFound("That file is no longer in storage.");
 
   const inline = INLINE_TYPES.has(row.contentType);
+
+  /*
+   * The stored name came from whoever uploaded the file. Stripping only quotes
+   * left semicolons and backslashes able to shape the header's parameters, and
+   * a newline made `new Headers` throw — permanently 500-ing that one document
+   * with no way to rename it. An ASCII fallback carries the shape; the real
+   * name rides along encoded.
+   */
+  const safe = row.name.replace(/[^\w .\-()]/g, "_").slice(0, 120) || "file";
   const headers = new Headers({
     "Content-Type": inline ? row.contentType : "application/octet-stream",
     "Content-Length": String(row.size),
     "X-Content-Type-Options": "nosniff",
-    "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${row.name.replace(/"/g, "")}"`,
+    "Content-Disposition":
+      `${inline ? "inline" : "attachment"}; filename="${safe}"; ` +
+      `filename*=UTF-8''${encodeURIComponent(row.name)}`,
     "Cache-Control": "private, no-store",
   });
 

@@ -17,18 +17,15 @@ export function YearScreen() {
   const year = useViewState((s) => s.year);
   const setYear = useViewState((s) => s.setYear);
   const { data, isPending, error, refetch } = useSheet(year);
-  const { data: me } = useMe();
+  const { data: me } = useMe(year);
   const unlock = useUnlockYear();
   const [billName, setBillName] = useState("");
 
   const currency = HOUSE_CONFIG.currency;
-  const currentYear = new Date().getFullYear();
-  const isCurrent = year === currentYear;
-  const canEdit = me?.actor?.role === "owner" || me?.actor?.role === "super_admin";
-  const unlocked = me?.actor?.unlockedYear === year;
-  /* Includes the role, like the month screen: without it a viewer is shown
-   * an editable-looking sheet the server will refuse every write on. */
-  const editable = canEdit && (isCurrent || unlocked);
+  /* The server owns this rule and answers with its own clock. */
+  const editable = me?.year?.editable ?? false;
+  const canUnlock = me?.year?.canUnlock ?? false;
+  const isCurrent = me?.year?.isCurrent ?? false;
 
   if (isPending) return <Loading label="Loading the sheet…" />;
 
@@ -46,7 +43,7 @@ export function YearScreen() {
     );
   }
 
-  const { sheet, totals, years } = data;
+  const { sheet, totals, years, currentYear } = data;
   const left = upcomingCount(sheet);
   const offered = [...new Set([currentYear, ...years, year])].sort((a, b) => b - a);
 
@@ -93,7 +90,7 @@ export function YearScreen() {
         <div className="mb-5">
           <Notice tone="info">
             {year} is read-only.{" "}
-            {canEdit ? (
+            {canUnlock ? (
               <button
                 type="button"
                 className="font-medium text-brand underline"

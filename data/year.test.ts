@@ -1,22 +1,35 @@
 import { eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { accounts, sessions } from "@/db/schema";
-import { testDb, truncateAll } from "@/test/db";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { accounts, sessions, tenants } from "@/db/schema";
+import { testDb, acquireSuiteLock, releaseSuiteLock, truncateAll } from "@/test/db";
 import type { Database } from "@/db/client";
 import { AccessDenied } from "./errors";
 import { requireEditorForYear } from "./guard";
 import { createSessionToken, hashToken, sessionExpiry, verifySession } from "./session";
+import {
+  createTenancy,
+  createTenant,
+  createUnit,
+  deleteTenancy,
+  endTenancy,
+  updateTenant,
+} from "./property";
 import { relockYear, unlockYear, yearState } from "./year";
 
 const { db, close } = testDb();
 const database = db as unknown as Database;
 const NOW = new Date("2026-08-27T12:00:00Z");
 
+beforeAll(async () => {
+  await acquireSuiteLock(db);
+});
+
 beforeEach(async () => {
   await truncateAll(db);
 });
 
 afterAll(async () => {
+  await releaseSuiteLock(db);
   await close();
 });
 
@@ -101,5 +114,75 @@ describe("what the year screen shows", () => {
     await db.insert(sessions).values({ id: hashToken(token), accountId: account.id, expiresAt: sessionExpiry() });
     const actor = (await verifySession(database, token))!;
     expect(yearState(actor, 2025, NOW)).toMatchObject({ editable: false, canUnlock: false });
+  });
+});
+
+describe("the year lock covers every write that moves money between months", () => {
+  async function aUnitTenantAndTenancy(year: number) {
+    const unit = await createUnit(database, `U${year}`, "somewhere");
+    const tenant = await createTenant(database, `T${year}`);
+    const tenancy = await createTenancy(database, {
+      unitId: unit.id,
+      tenantId: tenant.id,
+      start: { year, month: 1 },
+      end: null,
+      expectedRent: 1000,
+    });
+    return { unit, tenant, tenancy };
+  }
+
+  it("refuses opening a tenancy in a locked year", async () => {
+    const { actor } = await anEditor();
+    const unit = await createUnit(database, "F1(B)", "back");
+    const tenant = await createTenant(database, "Anwar");
+
+    await expect(
+      createTenancy(
+        database,
+        {
+          unitId: unit.id,
+          tenantId: tenant.id,
+          start: { year: 2025, month: 1 },
+          end: null,
+          expectedRent: 6000,
+        },
+        actor,
+      ),
+    ).rejects.toThrow(AccessDenied);
+  });
+
+  it("refuses ending a tenancy so that a locked year loses months", async () => {
+    const { tenancy } = await aUnitTenantAndTenancy(2025);
+    const { actor } = await anEditor();
+
+    await expect(
+      endTenancy(database, tenancy.id, { year: 2025, month: 6 }, actor),
+    ).rejects.toThrow(AccessDenied);
+  });
+
+  it("allows the same edit once that year is unlocked for this session", async () => {
+    const { tenancy } = await aUnitTenantAndTenancy(2025);
+    const editor = await anEditor();
+    await unlockYear(database, editor.actor, 2025, NOW);
+    const unlocked = await verifySession(database, editor.token);
+
+    await expect(
+      endTenancy(database, tenancy.id, { year: 2025, month: 6 }, unlocked!),
+    ).resolves.toBeDefined();
+  });
+
+  it("still allows renaming a tenant, which is identity rather than money", async () => {
+    await aUnitTenantAndTenancy(2025);
+    const [tenant] = await db.select().from(tenants);
+    /* No actor argument: renames are deliberately not year-scoped. */
+    await expect(
+      updateTenant(database, tenant.id, { name: "Corrected Spelling" }),
+    ).resolves.toMatchObject({ name: "Corrected Spelling" });
+  });
+
+  it("refuses deleting a tenancy that covered a locked year", async () => {
+    const { tenancy } = await aUnitTenantAndTenancy(2025);
+    const { actor } = await anEditor();
+    await expect(deleteTenancy(database, tenancy.id, actor)).rejects.toThrow(AccessDenied);
   });
 });

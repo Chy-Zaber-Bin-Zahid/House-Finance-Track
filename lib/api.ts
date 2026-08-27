@@ -26,7 +26,13 @@ export type Sheet = {
 
 export type Totals = { rent: number; bills: number; kept: number };
 
-export type SheetResponse = { sheet: Sheet; totals: Totals; years: number[] };
+export type SheetResponse = {
+  sheet: Sheet;
+  totals: Totals;
+  years: number[];
+  /** Decided by the server's clock, not the browser's. */
+  currentYear: number;
+};
 
 export type MonthRef = { year: number; month: number };
 
