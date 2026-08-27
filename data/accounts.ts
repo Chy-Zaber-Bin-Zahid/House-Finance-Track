@@ -87,3 +87,20 @@ export async function findByEmail(db: Database, email: string) {
     .limit(1);
   return account ?? null;
 }
+
+/**
+ * Replaces a password only when the current one is given correctly. Lives here
+ * rather than in the route so the route stays a thin wrapper and no endpoint
+ * builds its own query.
+ */
+export async function changePassword(
+  db: Database,
+  accountId: number,
+  current: string,
+  next: string,
+): Promise<boolean> {
+  const [account] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
+  if (!account || !(await verifyPassword(account.passwordHash, current))) return false;
+  await setPassword(db, accountId, next);
+  return true;
+}

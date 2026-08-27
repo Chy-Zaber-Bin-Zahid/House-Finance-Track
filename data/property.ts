@@ -1,0 +1,188 @@
+import { asc, eq } from "drizzle-orm";
+import type { Database } from "@/db/client";
+import { rentEntries, tenancies, tenants, units } from "@/db/schema";
+import { NotFound, StillReferenced } from "./errors";
+import { fromPeriod, toPeriod, type MonthRef } from "./period";
+
+/**
+ * Units, tenants, and the tenancies that join them. Kept separate on purpose:
+ * a tenant outlives the unit they rented, and a unit outlives its tenants.
+ */
+
+/** Turns the database's refusal into something a person can act on. */
+async function guardReferences<T>(what: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const cause = (error as { cause?: { constraint_name?: string } }).cause;
+    if (cause?.constraint_name) {
+      throw new StillReferenced(
+        `This ${what} still has money recorded against it, so it cannot be deleted. End it instead — its history stays either way.`,
+      );
+    }
+    throw error;
+  }
+}
+
+export async function listUnits(db: Database) {
+  return db.select().from(units).orderBy(asc(units.label));
+}
+
+export async function createUnit(db: Database, label: string, floor: string) {
+  const [row] = await db
+    .insert(units)
+    .values({ label: label.trim(), floor: floor.trim() || "Not set" })
+    .returning();
+  return row;
+}
+
+export async function updateUnit(db: Database, id: number, patch: { label?: string; floor?: string }) {
+  const [row] = await db.update(units).set(patch).where(eq(units.id, id)).returning();
+  if (!row) throw new NotFound("No such unit.");
+  return row;
+}
+
+export async function deleteUnit(db: Database, id: number) {
+  await guardReferences("unit", async () => {
+    const deleted = await db.delete(units).where(eq(units.id, id)).returning();
+    if (deleted.length === 0) throw new NotFound("No such unit.");
+  });
+}
+
+export async function listTenants(db: Database) {
+  return db.select().from(tenants).orderBy(asc(tenants.name));
+}
+
+export async function createTenant(db: Database, name: string, phone = "", notes = "") {
+  const [row] = await db
+    .insert(tenants)
+    .values({ name: name.trim(), phone: phone.trim(), notes })
+    .returning();
+  return row;
+}
+
+export async function updateTenant(
+  db: Database,
+  id: number,
+  patch: { name?: string; phone?: string; notes?: string },
+) {
+  const [row] = await db.update(tenants).set(patch).where(eq(tenants.id, id)).returning();
+  if (!row) throw new NotFound("No such tenant.");
+  return row;
+}
+
+export async function deleteTenant(db: Database, id: number) {
+  await guardReferences("tenant", async () => {
+    const deleted = await db.delete(tenants).where(eq(tenants.id, id)).returning();
+    if (deleted.length === 0) throw new NotFound("No such tenant.");
+  });
+}
+
+export type TenancyInput = {
+  unitId: number;
+  tenantId: number;
+  start: MonthRef;
+  end: MonthRef | null;
+  expectedRent: number;
+};
+
+export class OverlappingTenancy extends Error {
+  constructor() {
+    super("That unit already has a tenancy covering those months. End the current one first.");
+    this.name = "OverlappingTenancy";
+  }
+}
+
+export async function createTenancy(db: Database, input: TenancyInput) {
+  try {
+    const [row] = await db
+      .insert(tenancies)
+      .values({
+        unitId: input.unitId,
+        tenantId: input.tenantId,
+        period: toPeriod(input.start, input.end),
+        expectedRent: input.expectedRent,
+      })
+      .returning();
+    return row;
+  } catch (error) {
+    const cause = (error as { cause?: { constraint_name?: string } }).cause;
+    if (cause?.constraint_name === "tenancies_no_overlapping_period") throw new OverlappingTenancy();
+    throw error;
+  }
+}
+
+/** Ending a tenancy leaves the tenant and every amount recorded under it intact. */
+export async function endTenancy(db: Database, id: number, end: MonthRef) {
+  const [existing] = await db.select().from(tenancies).where(eq(tenancies.id, id)).limit(1);
+  if (!existing) throw new NotFound("No such tenancy.");
+
+  const { start } = fromPeriod(existing.period);
+  const [row] = await db
+    .update(tenancies)
+    .set({ period: toPeriod(start, end) })
+    .where(eq(tenancies.id, id))
+    .returning();
+  return row;
+}
+
+export async function deleteTenancy(db: Database, id: number) {
+  await guardReferences("tenancy", async () => {
+    const deleted = await db.delete(tenancies).where(eq(tenancies.id, id)).returning();
+    if (deleted.length === 0) throw new NotFound("No such tenancy.");
+  });
+}
+
+export async function listTenancies(db: Database) {
+  const rows = await db
+    .select({
+      id: tenancies.id,
+      period: tenancies.period,
+      expectedRent: tenancies.expectedRent,
+      unitId: units.id,
+      unitLabel: units.label,
+      tenantId: tenants.id,
+      tenantName: tenants.name,
+    })
+    .from(tenancies)
+    .innerJoin(units, eq(units.id, tenancies.unitId))
+    .innerJoin(tenants, eq(tenants.id, tenancies.tenantId))
+    .orderBy(asc(units.label));
+
+  return rows.map((r) => ({ ...r, ...fromPeriod(r.period) }));
+}
+
+/** Every tenancy a tenant has held, with what was collected under each. */
+export async function tenantHistory(db: Database, tenantId: number) {
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  if (!tenant) throw new NotFound("No such tenant.");
+
+  const held = await db
+    .select({
+      id: tenancies.id,
+      period: tenancies.period,
+      expectedRent: tenancies.expectedRent,
+      unitLabel: units.label,
+    })
+    .from(tenancies)
+    .innerJoin(units, eq(units.id, tenancies.unitId))
+    .where(eq(tenancies.tenantId, tenantId));
+
+  const withRent = await Promise.all(
+    held.map(async (tenancy) => {
+      const rent = await db
+        .select()
+        .from(rentEntries)
+        .where(eq(rentEntries.tenancyId, tenancy.id))
+        .orderBy(asc(rentEntries.year), asc(rentEntries.month));
+      return {
+        ...tenancy,
+        ...fromPeriod(tenancy.period),
+        collected: rent.reduce((total, r) => total + r.amount, 0),
+        entries: rent,
+      };
+    }),
+  );
+
+  return { tenant, tenancies: withRent };
+}
