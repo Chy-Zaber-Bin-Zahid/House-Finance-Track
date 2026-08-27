@@ -27,6 +27,7 @@ export const daterange = customType<{ data: string; driverData: string }>({
 export const accountStatus = pgEnum("account_status", ["awaiting", "approved", "rejected"]);
 export const accountRole = pgEnum("account_role", ["owner", "super_admin", "viewer"]);
 export const entryStatus = pgEnum("entry_status", ["paid", "upcoming"]);
+export const documentKind = pgEnum("document_kind", ["photo", "document"]);
 
 export const accounts = pgTable("accounts", {
   id: serial("id").primaryKey(),
@@ -83,6 +84,29 @@ export const tenancies = pgTable("tenancies", {
   /** What this tenancy charges each month; drives the placeholder on the month screen. */
   expectedRent: integer("expected_rent").notNull().default(0),
 });
+
+/**
+ * Metadata for a file whose bytes live in object storage. Deleting a tenant
+ * takes their files with them: unlike money, a document is not history the
+ * sheet depends on.
+ */
+export const documents = pgTable("documents", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  kind: documentKind("kind").notNull().default("document"),
+  /** Where the bytes are in the bucket. Never handed to a browser. */
+  objectKey: text("object_key").notNull().unique(),
+  name: text("name").notNull(),
+  contentType: text("content_type").notNull(),
+  size: integer("size").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const documentRelations = relations(documents, ({ one }) => ({
+  tenant: one(tenants, { fields: [documents.tenantId], references: [tenants.id] }),
+}));
 
 export const billTypes = pgTable("bill_types", {
   id: serial("id").primaryKey(),
