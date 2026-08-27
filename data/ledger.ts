@@ -8,9 +8,8 @@ export type EntryStatus = "paid" | "upcoming";
 
 /* ------------------------------- bill types ------------------------------ */
 
-export async function listBillTypes(db: Database, includeRetired = true) {
-  const rows = await db.select().from(billTypes).orderBy(asc(billTypes.id));
-  return includeRetired ? rows : rows.filter((b) => b.active);
+export async function listBillTypes(db: Database) {
+  return db.select().from(billTypes).orderBy(asc(billTypes.id));
 }
 
 export async function createBillType(db: Database, name: string) {
@@ -137,6 +136,8 @@ export async function tenanciesForMonth(db: Database, year: number, month: numbe
 
 export type SheetCell = { amount: number; status: EntryStatus };
 
+const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+
 /** The whole year, in the shape the sheet reads. */
 export async function yearSheet(db: Database, year: number) {
   const types = await billTypesForYear(db, year);
@@ -155,8 +156,6 @@ export async function yearSheet(db: Database, year: number) {
 
   const rent = await db.select().from(rentEntries).where(eq(rentEntries.year, year));
   const bills = await db.select().from(billEntries).where(eq(billEntries.year, year));
-
-  const tenancyById = new Map(held.map((t) => [t.id, t]));
 
   const months = Array.from({ length: 12 }, (_, i) => {
     const month = i + 1;
@@ -188,15 +187,23 @@ export async function yearSheet(db: Database, year: number) {
     billTypes: types,
     units: allUnits,
     months,
+    /*
+     * Only tenancies that touch this year. Filtering by unit alone marks a unit
+     * that changed hands in 2023 as having changed hands in 2026, which is the
+     * opposite of what the marker on the sheet says.
+     */
     handovers: allUnits
       .map((unit) => ({
         unitId: unit.id,
         tenancies: held
-          .filter((t) => t.unitId === unit.id)
+          .filter(
+            (t) =>
+              t.unitId === unit.id &&
+              MONTHS.some((month) => covers(t.period, year, month)),
+          )
           .map((t) => ({ tenantName: t.tenantName, ...fromPeriod(t.period) })),
       }))
       .filter((h) => h.tenancies.length > 1),
-    tenancyById: Object.fromEntries(tenancyById),
   };
 }
 

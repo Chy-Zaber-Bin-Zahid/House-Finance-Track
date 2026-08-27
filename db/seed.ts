@@ -23,6 +23,18 @@ function periodFrom(year: number): string {
 }
 
 export async function seed(db: Database): Promise<void> {
+  /*
+   * Units and tenants carry no unique constraint, so a second run would insert
+   * a whole duplicate ledger before failing on the bill-type name - doubling
+   * every figure and leaving no rollback behind it.
+   */
+  const already = await db.select({ id: units.id }).from(units).limit(1);
+  if (already.length > 0) {
+    throw new Error(
+      "This database already holds units. Seeding again would duplicate the ledger; truncate first if that is what you want.",
+    );
+  }
+
   const state = createInitialState();
 
   const insertedUnits = await db

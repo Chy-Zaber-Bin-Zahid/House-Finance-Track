@@ -175,3 +175,19 @@ describe("the seed reproduces the sheet", () => {
     expect(rows.every((t) => t.period.endsWith(",)"))).toBe(true);
   });
 });
+
+describe("a period that ends before it starts cannot be stored", () => {
+  it("is refused by the database even if application code lets one through", async () => {
+    const { unit, tenant } = await aUnitAndTenant();
+    const rejection = await expectRejection(
+      db.insert(tenancies).values({
+        unitId: unit.id,
+        tenantId: tenant.id,
+        // What toPeriod would produce for an end one month before the start.
+        period: `[${SEED_YEAR}-06-01,${SEED_YEAR}-06-01)`,
+        expectedRent: 6000,
+      }),
+    );
+    expect(rejection.constraint).toBe("tenancies_period_not_empty");
+  });
+});

@@ -1,6 +1,7 @@
 import { requireApproved, requireEditor } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
 import { createTenancy, listTenancies, OverlappingTenancy } from "@/data/property";
+import { BackwardsPeriod } from "@/data/period";
 import { db } from "@/db/client";
 
 type Month = { year: number; month: number };
@@ -53,6 +54,9 @@ export async function POST(request: Request) {
     });
     return Response.json({ tenancy }, { status: 201 });
   } catch (error) {
+    if (error instanceof BackwardsPeriod) {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
     if (error instanceof OverlappingTenancy) {
       return Response.json({ error: error.message }, { status: 409 });
     }

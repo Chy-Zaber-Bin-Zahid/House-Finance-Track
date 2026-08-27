@@ -10,6 +10,18 @@
 
 export type MonthRef = { year: number; month: number };
 
+export class BackwardsPeriod extends Error {
+  constructor() {
+    super("A tenancy cannot end before it starts.");
+    this.name = "BackwardsPeriod";
+  }
+}
+
+/** Months as a single ordinal, so two of them can be compared. */
+export function ordinal({ year, month }: MonthRef): number {
+  return year * 12 + month;
+}
+
 function firstOf({ year, month }: MonthRef): string {
   return `${year}-${String(month).padStart(2, "0")}-01`;
 }
@@ -19,6 +31,13 @@ function firstOfNext({ year, month }: MonthRef): string {
 }
 
 export function toPeriod(start: MonthRef, end: MonthRef | null): string {
+  /*
+   * An end one month before the start yields `[x,x)`, which Postgres stores as
+   * `empty`. Empty overlaps nothing, so the exclusion constraint accepts it —
+   * and then nothing can read it back, because `fromPeriod` cannot parse
+   * `empty` and it sits on the read path of every screen. Refuse here.
+   */
+  if (end && ordinal(end) < ordinal(start)) throw new BackwardsPeriod();
   return `[${firstOf(start)},${end ? firstOfNext(end) : ""})`;
 }
 

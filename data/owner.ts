@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { Database } from "@/db/client";
-import { accounts } from "@/db/schema";
+import { accounts, sessions } from "@/db/schema";
 import { hashPassword } from "./passwords";
 
 /**
@@ -27,13 +27,22 @@ export async function seedOwner(
   const [existing] = await db.select().from(accounts).where(eq(accounts.email, email)).limit(1);
 
   if (!existing) {
-    await db.insert(accounts).values({
-      email,
-      passwordHash: await hashPassword(password),
-      status: "approved",
-      role: "owner",
-    });
-    return "created";
+    /*
+     * Idempotent rather than check-then-act: two instances booting together
+     * would both find no owner and both insert, and the loser would reject
+     * during startup.
+     */
+    const inserted = await db
+      .insert(accounts)
+      .values({
+        email,
+        passwordHash: await hashPassword(password),
+        status: "approved",
+        role: "owner",
+      })
+      .onConflictDoNothing({ target: accounts.email })
+      .returning();
+    return inserted.length > 0 ? "created" : "kept";
   }
 
   /*
@@ -48,8 +57,15 @@ export async function seedOwner(
       .update(accounts)
       .set({ passwordHash: await hashPassword(password), status: "approved", role: "owner" })
       .where(eq(accounts.id, existing.id));
+    /*
+     * This hatch is reached precisely when control of the owner account may
+     * have been lost, so leaving an existing session alive would defeat it.
+     */
+    await db.delete(sessions).where(eq(sessions.accountId, existing.id));
     console.warn(
-      `OWNER_PASSWORD_RESEED was set: the owner password for ${email} was overwritten from the environment.`,
+      `OWNER_PASSWORD_RESEED was set: the owner password for ${email} was overwritten from the ` +
+        `environment and every owner session was ended. Unset OWNER_PASSWORD_RESEED now — it ` +
+        `re-applies on every boot and will undo a password changed in the app.`,
     );
     return "reseeded";
   }

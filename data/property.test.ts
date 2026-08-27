@@ -3,6 +3,7 @@ import { rentEntries } from "@/db/schema";
 import { testDb, truncateAll } from "@/test/db";
 import type { Database } from "@/db/client";
 import { NotFound, StillReferenced } from "./errors";
+import { BackwardsPeriod } from "./period";
 import {
   createTenancy,
   createTenant,
@@ -164,5 +165,42 @@ describe("deleting", () => {
   it("reports a missing record rather than succeeding quietly", async () => {
     await expect(deleteUnit(database, 9_999)).rejects.toThrow(NotFound);
     await expect(tenantHistory(database, 9_999)).rejects.toThrow(NotFound);
+  });
+});
+
+describe("a tenancy cannot end before it starts", () => {
+  it("refuses an end month before the start, rather than storing an unreadable period", async () => {
+    const unit = await createUnit(database, "F1(B)", "back");
+    const anwar = await createTenant(database, "Anwar");
+    const tenancy = await createTenancy(database, {
+      unitId: unit.id,
+      tenantId: anwar.id,
+      start: { year: 2026, month: 6 },
+      end: null,
+      expectedRent: 6000,
+    });
+
+    await expect(endTenancy(database, tenancy.id, { year: 2026, month: 5 })).rejects.toThrow(
+      BackwardsPeriod,
+    );
+
+    /* The tenancy is untouched, and every read path still works. */
+    const held = await listTenancies(database);
+    expect(held).toHaveLength(1);
+    expect(held[0].end).toBeNull();
+  });
+
+  it("refuses one at creation too", async () => {
+    const unit = await createUnit(database, "B1", "ground");
+    const kamal = await createTenant(database, "Kamal");
+    await expect(
+      createTenancy(database, {
+        unitId: unit.id,
+        tenantId: kamal.id,
+        start: { year: 2026, month: 6 },
+        end: { year: 2026, month: 1 },
+        expectedRent: 11000,
+      }),
+    ).rejects.toThrow(BackwardsPeriod);
   });
 });

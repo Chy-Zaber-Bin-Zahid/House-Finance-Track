@@ -43,8 +43,17 @@ export class R2Store implements ObjectStore {
       );
       return (result.Body as { transformToWebStream?: () => ReadableStream<Uint8Array> })
         ?.transformToWebStream?.() ?? null;
-    } catch {
-      return null;
+    } catch (error) {
+      /*
+       * Only a genuinely missing object is "not found". Swallowing everything
+       * here would tell someone their document had vanished when the real
+       * cause was an outage, a rotated credential, or the wrong bucket - and
+       * would hide the one signal that storage is unreachable.
+       */
+      const cause = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (cause.name === "NoSuchKey" || cause.$metadata?.httpStatusCode === 404) return null;
+      console.error("R2 read failed", { key, error });
+      throw error;
     }
   }
 

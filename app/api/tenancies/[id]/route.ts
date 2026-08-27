@@ -1,6 +1,7 @@
 import { requireEditor } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
-import { deleteTenancy, endTenancy } from "@/data/property";
+import { deleteTenancy, endTenancy, OverlappingTenancy } from "@/data/property";
+import { BackwardsPeriod } from "@/data/period";
 import { db } from "@/db/client";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -13,6 +14,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     }
     return Response.json({ tenancy: await endTenancy(db, id, { year: body.end.year, month: body.end.month }) });
   } catch (error) {
+    if (error instanceof BackwardsPeriod) {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof OverlappingTenancy) {
+      return Response.json({ error: error.message }, { status: 409 });
+    }
     return toResponse(error);
   }
 }

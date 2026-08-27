@@ -59,8 +59,19 @@ export function toResponse(error: unknown): Response {
   return Response.json({ error: "Something went wrong." }, { status: 500 });
 }
 
-/** The caller's address, for rate limiting. */
+/**
+ * The caller's address, for rate limiting.
+ *
+ * `x-forwarded-for` is written by the client, and a proxy appends rather than
+ * replaces - so the first element is whatever the caller put there. Reading it
+ * blindly lets anyone mint a fresh rate-limit bucket per request. Only the hops
+ * a deployment actually declares are trusted; with none declared the header is
+ * ignored entirely.
+ */
 export function addressOf(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() || "local";
+  const hops = Number(process.env.TRUSTED_PROXY_HOPS ?? "0");
+  if (!Number.isInteger(hops) || hops < 1) return "direct";
+
+  const chain = request.headers.get("x-forwarded-for")?.split(",").map((p) => p.trim()) ?? [];
+  return chain.at(-hops) || "direct";
 }

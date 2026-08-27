@@ -7,6 +7,18 @@ type Window = { count: number; resetAt: number };
 
 const windows = new Map<string, Window>();
 
+/**
+ * A backstop, not a policy. Keys embed caller-supplied values, so without a
+ * bound the limiter's own state is the memory leak.
+ */
+const MAX_WINDOWS = 10_000;
+
+function prune(now: number): void {
+  for (const [key, window] of windows) {
+    if (window.resetAt <= now) windows.delete(key);
+  }
+}
+
 export type Limit = { max: number; windowMs: number };
 
 export const SIGN_IN_PER_EMAIL: Limit = { max: 5, windowMs: 15 * 60 * 1000 };
@@ -18,6 +30,9 @@ export const PASSWORD_CHANGE_PER_ACCOUNT: Limit = { max: 5, windowMs: 15 * 60 * 
 export function consume(key: string, limit: Limit, now = Date.now()): boolean {
   const existing = windows.get(key);
   if (!existing || existing.resetAt <= now) {
+    if (windows.size >= MAX_WINDOWS) prune(now);
+    /* Still full of live windows: refuse rather than grow without bound. */
+    if (windows.size >= MAX_WINDOWS) return false;
     windows.set(key, { count: 1, resetAt: now + limit.windowMs });
     return true;
   }
@@ -29,6 +44,11 @@ export function consume(key: string, limit: Limit, now = Date.now()): boolean {
 /** Called after a success, so a legitimate sign-in clears the failure count. */
 export function reset(key: string): void {
   windows.delete(key);
+}
+
+/** How many windows are held, so a test can prove the bound. */
+export function windowCount(): number {
+  return windows.size;
 }
 
 /** Test seam only. */

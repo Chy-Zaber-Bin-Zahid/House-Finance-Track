@@ -1,6 +1,6 @@
 import { requireApproved } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
-import { billTypesForYear, monthTotals, tenanciesForMonth, yearSheet } from "@/data/ledger";
+import { monthTotals, tenanciesForMonth, yearSheet } from "@/data/ledger";
 import { db } from "@/db/client";
 
 export async function GET(
@@ -16,15 +16,23 @@ export async function GET(
       return Response.json({ error: "That is not a month." }, { status: 400 });
     }
 
-    const [types, running, totals, sheet] = await Promise.all([
-      billTypesForYear(db, year),
+    const [running, totals, sheet] = await Promise.all([
       tenanciesForMonth(db, year, month),
       monthTotals(db, year, month),
       yearSheet(db, year),
     ]);
 
+    /* yearSheet already resolved the year's bill types; asking twice ran the
+     * same two queries for the same answer. */
     const cells = sheet.months[month - 1];
-    return Response.json({ year, month, billTypes: types, tenancies: running, totals, cells });
+    return Response.json({
+      year,
+      month,
+      billTypes: sheet.billTypes,
+      tenancies: running,
+      totals,
+      cells,
+    });
   } catch (error) {
     return toResponse(error);
   }

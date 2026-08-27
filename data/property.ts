@@ -2,7 +2,8 @@ import { asc, eq } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import { rentEntries, tenancies, tenants, units } from "@/db/schema";
 import { NotFound, StillReferenced } from "./errors";
-import { fromPeriod, toPeriod, type MonthRef } from "./period";
+import { MONTH_NAMES } from "@/lib/seed";
+import { BackwardsPeriod, fromPeriod, ordinal, toPeriod, type MonthRef } from "./period";
 
 /**
  * Units, tenants, and the tenancies that join them. Kept separate on purpose:
@@ -14,10 +15,18 @@ async function guardReferences<T>(what: string, run: () => Promise<T>): Promise<
   try {
     return await run();
   } catch (error) {
-    const cause = (error as { cause?: { constraint_name?: string } }).cause;
-    if (cause?.constraint_name) {
+    const constraint = (error as { cause?: { constraint_name?: string } }).cause?.constraint_name;
+    if (constraint) {
+      /*
+       * One message for every constraint told someone with a mistyped unit that
+       * it "has money recorded" and to end the tenancy instead - advice that
+       * does not unblock the delete, because the tenancy is the reference.
+       */
+      const blockedByTenancy = constraint.startsWith("tenancies_");
       throw new StillReferenced(
-        `This ${what} still has money recorded against it, so it cannot be deleted. End it instead — its history stays either way.`,
+        blockedByTenancy
+          ? `This ${what} still has a tenancy on it. Delete the tenancy first, or leave it — ended tenancies keep their history.`
+          : `This ${what} has money recorded against it, so it cannot be deleted. End it instead — its history stays either way.`,
       );
     }
     throw error;
@@ -118,12 +127,38 @@ export async function endTenancy(db: Database, id: number, end: MonthRef) {
   if (!existing) throw new NotFound("No such tenancy.");
 
   const { start } = fromPeriod(existing.period);
-  const [row] = await db
-    .update(tenancies)
-    .set({ period: toPeriod(start, end) })
-    .where(eq(tenancies.id, id))
-    .returning();
-  return row;
+
+  /*
+   * Rent recorded after the new end month would keep counting toward the year
+   * total while no cell could show it - the sheet's columns would stop adding
+   * up to the total printed beside them. Refuse rather than let money fall out
+   * of view.
+   */
+  const recorded = await db.select().from(rentEntries).where(eq(rentEntries.tenancyId, id));
+  const stranded = recorded.filter(
+    (entry) => entry.amount > 0 && ordinal({ year: entry.year, month: entry.month }) > ordinal(end),
+  );
+  if (stranded.length > 0) {
+    const months = stranded
+      .map((e) => `${MONTH_NAMES[e.month - 1].slice(0, 3)} ${e.year}`)
+      .join(", ");
+    throw new StillReferenced(
+      `This tenancy has rent recorded after that month (${months}). Clear those amounts first, or end it later.`,
+    );
+  }
+
+  try {
+    const [row] = await db
+      .update(tenancies)
+      .set({ period: toPeriod(start, end) })
+      .where(eq(tenancies.id, id))
+      .returning();
+    return row;
+  } catch (error) {
+    const cause = (error as { cause?: { constraint_name?: string } }).cause;
+    if (cause?.constraint_name === "tenancies_no_overlapping_period") throw new OverlappingTenancy();
+    throw error;
+  }
 }
 
 export async function deleteTenancy(db: Database, id: number) {

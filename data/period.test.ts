@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { covers, fromPeriod, toPeriod } from "./period";
+import { BackwardsPeriod, covers, fromPeriod, toPeriod } from "./period";
 
 describe("a period is half-open, first-of-month to first-of-next", () => {
   it("writes a closed range whose upper bound is the month after the end", () => {
@@ -61,5 +61,25 @@ describe("covers", () => {
     expect(covers(open, 2026, 7)).toBe(true);
     expect(covers(open, 2030, 3)).toBe(true);
     expect(covers(open, 2026, 6)).toBe(false);
+  });
+});
+
+describe("a period that ends before it starts is refused", () => {
+  it("refuses an end one month before the start, which Postgres would store as empty", () => {
+    expect(() => toPeriod({ year: 2026, month: 2 }, { year: 2026, month: 1 })).toThrow(
+      BackwardsPeriod,
+    );
+  });
+
+  it("refuses an end well before the start", () => {
+    expect(() => toPeriod({ year: 2026, month: 6 }, { year: 2025, month: 4 })).toThrow(
+      BackwardsPeriod,
+    );
+  });
+
+  it("allows a tenancy that starts and ends in the same month", () => {
+    expect(toPeriod({ year: 2026, month: 6 }, { year: 2026, month: 6 })).toBe(
+      "[2026-06-01,2026-07-01)",
+    );
   });
 });

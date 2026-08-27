@@ -1,4 +1,4 @@
-import { requireEditorForYear } from "@/data/guard";
+import { requireEditor, requireEditorForYear } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
 import { setBillAmount, setRentAmount, type EntryStatus } from "@/data/ledger";
 import { db } from "@/db/client";
@@ -15,6 +15,10 @@ type Body = {
 
 export async function POST(request: Request) {
   try {
+    /* Turn away a caller who was never going to be allowed to write, before
+     * doing any work on their input - the shape every sibling handler uses. */
+    requireEditor(await currentActor());
+
     const body = (await request.json()) as Body;
 
     if (

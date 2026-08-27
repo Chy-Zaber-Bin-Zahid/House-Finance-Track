@@ -418,6 +418,9 @@ function EndTenancyPanel({
   const end = useEndTenancy();
   const now = new Date();
   const [id, setId] = useState(tenancies[0]?.id ?? 0);
+  /* After a successful end the list shrinks under this state, and a stale id
+   * would send the next click at an already-ended tenancy. */
+  const selected = tenancies.some((t) => t.id === id) ? id : (tenancies[0]?.id ?? 0);
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
 
@@ -431,7 +434,7 @@ function EndTenancyPanel({
       <div className="flex flex-wrap items-end gap-[13px]">
         <div className="w-[260px]">
           <Label htmlFor="end-tenancy">Tenancy</Label>
-          <Select id="end-tenancy" value={id} onChange={(e) => setId(Number(e.target.value))}>
+          <Select id="end-tenancy" value={selected} onChange={(e) => setId(Number(e.target.value))}>
             {tenancies.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.unitLabel} — {t.tenantName}
@@ -455,8 +458,8 @@ function EndTenancyPanel({
         </div>
         <Button
           variant="primary"
-          disabled={end.isPending}
-          onClick={() => end.mutate({ id, end: { year, month } })}
+          disabled={end.isPending || selected === 0}
+          onClick={() => end.mutate({ id: selected, end: { year, month } })}
         >
           {end.isPending ? "Ending…" : "End the tenancy"}
         </Button>

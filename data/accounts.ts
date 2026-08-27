@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import { accounts, sessions } from "@/db/schema";
-import { hashPassword, verifyPassword } from "./passwords";
+import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword, WeakPassword } from "./passwords";
 import {
   consume,
   reset,
@@ -61,9 +61,19 @@ export async function signIn(
 /** Creates an account that cannot sign in until the owner approves it. */
 export async function register(db: Database, email: string, password: string): Promise<void> {
   const normalised = email.trim().toLowerCase();
-  const passwordHash = await hashPassword(password);
 
-  const existing = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.email, normalised)).limit(1);
+  /*
+   * Cheap checks first. Hashing costs 64 MB and tens of milliseconds, and this
+   * endpoint is open to the internet - paying that before knowing whether the
+   * work is needed turns registration into a memory-exhaustion lever.
+   */
+  if (password.length < MIN_PASSWORD_LENGTH) throw new WeakPassword();
+
+  const existing = await db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(eq(accounts.email, normalised))
+    .limit(1);
   /*
    * A duplicate registration succeeds silently rather than reporting that the
    * address is taken, for the same reason sign-in gives one refusal: the
@@ -71,6 +81,7 @@ export async function register(db: Database, email: string, password: string): P
    */
   if (existing.length > 0) return;
 
+  const passwordHash = await hashPassword(password);
   await db.insert(accounts).values({ email: normalised, passwordHash, status: "awaiting", role: null });
 }
 

@@ -55,34 +55,67 @@ export async function saveDocument(
   const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
   if (!tenant) throw new NotFound("No such tenant.");
 
-  /* A photo replaces the previous one rather than accumulating. */
-  if (kind === "photo") {
-    const existing = await photoFor(db, tenantId);
-    if (existing) await removeDocument(db, existing.id);
-  }
-
   const objectKey = `tenants/${tenantId}/${kind}/${randomUUID()}`;
   await objectStore().put(objectKey, file.bytes, file.contentType);
 
-  const [row] = await db
-    .insert(documents)
-    .values({
-      tenantId,
-      kind,
-      objectKey,
-      name: file.name,
-      contentType: file.contentType,
-      size: file.bytes.byteLength,
-    })
-    .returning();
+  let row: StoredDocument;
+  try {
+    [row] = await db
+      .insert(documents)
+      .values({
+        tenantId,
+        kind,
+        objectKey,
+        /* Bounded so a hostile name cannot make its own row unservable. */
+        name: file.name.slice(0, 255),
+        contentType: file.contentType,
+        size: file.bytes.byteLength,
+      })
+      .returning();
+  } catch (error) {
+    /*
+     * The bytes are already stored. Without this they would sit in the bucket
+     * forever with no row referencing them and nothing recording the leak.
+     */
+    await objectStore()
+      .delete(objectKey)
+      .catch(() => console.error("Orphaned object left in storage", { objectKey }));
+    throw error;
+  }
+
+  /*
+   * A photo replaces the previous one, and the replacement is stored before the
+   * old one is removed. The other order loses the existing photo whenever the
+   * upload fails, leaving the tenant with none at all.
+   */
+  if (kind === "photo") {
+    const previous = await db
+      .select()
+      .from(documents)
+      .where(and(eq(documents.tenantId, tenantId), eq(documents.kind, "photo")))
+      .orderBy(asc(documents.id));
+    for (const old of previous) {
+      if (old.id !== row.id) await removeDocument(db, old.id);
+    }
+  }
+
   return row;
 }
 
 export async function removeDocument(db: Database, id: number): Promise<void> {
   const [row] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
   if (!row) throw new NotFound("No such file.");
-  await objectStore().delete(row.objectKey);
+
+  /*
+   * The row goes first. A failure between the two then leaves bytes in the
+   * bucket that nothing references - invisible and sweepable - rather than a
+   * live row pointing at bytes that are gone, which surfaces to the user as a
+   * file that is listed but will not open.
+   */
   await db.delete(documents).where(eq(documents.id, id));
+  await objectStore()
+    .delete(row.objectKey)
+    .catch(() => console.error("Object left in storage after its row was removed", { key: row.objectKey }));
 }
 
 /**

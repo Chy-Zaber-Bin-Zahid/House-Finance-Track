@@ -26,7 +26,9 @@ export function YearScreen() {
   const isCurrent = year === currentYear;
   const canEdit = me?.actor?.role === "owner" || me?.actor?.role === "super_admin";
   const unlocked = me?.actor?.unlockedYear === year;
-  const editable = isCurrent || unlocked;
+  /* Includes the role, like the month screen: without it a viewer is shown
+   * an editable-looking sheet the server will refuse every write on. */
+  const editable = canEdit && (isCurrent || unlocked);
 
   if (isPending) return <Loading label="Loading the sheet…" />;
 

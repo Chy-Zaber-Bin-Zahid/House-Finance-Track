@@ -17,7 +17,7 @@ type MonthResponse = {
   year: number;
   month: number;
   billTypes: { id: number; name: string; active: boolean }[];
-  tenancies: { id: number; unitLabel: string; tenantName: string; expectedRent: number }[];
+  tenancies: { id: number; unitId: number; unitLabel: string; tenantName: string; expectedRent: number }[];
   totals: { rent: number; bills: number; kept: number };
   cells: MonthRow;
 };
@@ -150,17 +150,14 @@ export function MonthScreen({ year, month }: { year: number; month: number }) {
               </p>
             ) : (
               data.tenancies.map((tenancy) => {
-                const unitId = Number(
-                  Object.keys(data.cells.rent).find(
-                    (id) => data.cells.rent[Number(id)].tenantName === tenancy.tenantName,
-                  ) ?? 0,
-                );
+                /* The server sends unitId; matching on tenant name instead made
+                 * two tenants who share a name show each other's figures. */
                 return (
                   <EntryRow
                     key={tenancy.id}
                     label={tenancy.unitLabel}
                     boldLabel
-                    cell={data.cells.rent[unitId] ?? { amount: 0, status: "upcoming" }}
+                    cell={data.cells.rent[tenancy.unitId] ?? { amount: 0, status: "upcoming" }}
                     placeholder={String(tenancy.expectedRent || 0)}
                     editable={editable}
                     onAmount={(amount) =>
