@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+@theme {
+  /* Type */
+  --font-sans: var(--font-figtree), Figtree, system-ui, sans-serif;
+
+  /* Ink */
+  --color-ink: #111315;
+  --color-ink-hover: #292d31;
+  --color-muted: #5f666d;
+  --color-muted-2: #5c636a;
+  --color-slate: #4a5158;
+  --color-chevron: #c2c7cb;
+
+  /* Brand */
+  --color-brand: #17835c;
+  --color-brand-hover: #0f6144;
+  --color-brand-deep: #116d4c;
+  --color-brand-tint: #e3f3ea;
+  --color-brand-wash: #f4fbf7;
+
+  /* Status */
+  --color-amber: #e0a02a;
+  --color-amber-tint: #fbf1de;
+  --color-amber-ink: #8a6210;
+
+  /* Surfaces */
+  --color-canvas: #ffffff;
+  --color-surface: #f7f8f8;
+  --color-surface-hover: #f3f4f5;
+  --color-chip: #eceeef;
+  --color-avatar: #e9ebec;
+  --color-bar: #d3d7da;
+
+  /* Hairlines — all tints of the ink */
+  --color-line-5: rgb(17 19 21 / 0.05);
+  --color-line-6: rgb(17 19 21 / 0.055);
+  --color-line-7: rgb(17 19 21 / 0.07);
+  --color-line-9: rgb(17 19 21 / 0.09);
+  --color-line-12: rgb(17 19 21 / 0.12);
+  --color-line-13: rgb(17 19 21 / 0.13);
+  --color-line-16: rgb(17 19 21 / 0.16);
+  --color-line-20: rgb(17 19 21 / 0.2);
+  --color-line-22: rgb(17 19 21 / 0.22);
+  --color-zebra: rgb(17 19 21 / 0.026);
+  --color-hover-row: rgb(17 19 21 / 0.018);
+  --color-nav-active: rgb(17 19 21 / 0.06);
+
+  /* Radii */
+  --radius-card: 14px;
+  --radius-field: 9px;
+  --radius-nav: 8px;
+  --radius-tile: 12px;
+
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 4px 14px rgb(16 24 40 / 0.045);
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: rgb(23 131 92 / 0.18);
+  }
+
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-16);
+    border-radius: 99px;
+    border: 3px solid var(--color-canvas);
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
