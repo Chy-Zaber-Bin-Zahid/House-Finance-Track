@@ -1,21 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useHouse } from "@/components/house-store";
 import { Card } from "@/components/ui";
-import { chartBars, yearBillTotal, yearRentTotal } from "@/lib/derive";
-import { formatAmount } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { HOUSE_CONFIG } from "@/lib/config";
+import { formatAmount } from "@/lib/format";
+import type { Sheet, Totals } from "@/lib/api";
+import { chartBars } from "@/lib/sheet";
 
-function Stat({
-  label,
-  value,
-  accent = false,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
+function Stat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
     <div>
       <div className="mb-[5px] text-[12.5px] font-medium text-muted">{label}</div>
@@ -31,27 +24,19 @@ function Stat({
   );
 }
 
-export function YearOverview() {
-  const { state, config, lastMonth, rememberMonth } = useHouse();
+export function YearOverview({ sheet, totals }: { sheet: Sheet; totals: Totals }) {
   const router = useRouter();
-
-  const bills = yearBillTotal(state);
-  const rent = yearRentTotal(state);
-  const bars = chartBars(state);
-
-  function openMonth(month: number) {
-    rememberMonth(month);
-    router.push(`/month/${month + 1}`);
-  }
+  const currency = HOUSE_CONFIG.currency;
+  const bars = chartBars(sheet);
 
   return (
     <Card className="mb-6 px-6 pt-[22px] pb-5">
       <div className="mb-[22px] flex flex-wrap items-start gap-[26px]">
-        <Stat label="Rent collected" value={formatAmount(rent, config.currency)} />
+        <Stat label="Rent collected" value={formatAmount(totals.rent, currency)} />
         <div className="w-px self-stretch bg-line-9" />
-        <Stat label="Bills paid" value={formatAmount(bills, config.currency)} />
+        <Stat label="Bills paid" value={formatAmount(totals.bills, currency)} />
         <div className="w-px self-stretch bg-line-9" />
-        <Stat label="You kept" value={formatAmount(rent - bills, config.currency)} accent />
+        <Stat label="You kept" value={formatAmount(totals.kept, currency)} accent />
         <div className="ml-auto flex items-center gap-4 pt-5 text-[12.5px] text-muted">
           <span className="flex items-center gap-[7px]">
             <i aria-hidden="true" className="block size-2.5 rounded-[3px] bg-brand" />
@@ -69,11 +54,8 @@ export function YearOverview() {
           <button
             key={bar.month}
             type="button"
-            onClick={() => openMonth(bar.month)}
-            title={`${bar.short}: rent ${formatAmount(bar.rent, config.currency)}, bills ${formatAmount(
-              bar.bill,
-              config.currency,
-            )}`}
+            onClick={() => router.push(`/month/${sheet.year}/${bar.month}`)}
+            title={`${bar.short}: rent ${formatAmount(bar.rent, currency)}, bills ${formatAmount(bar.bill, currency)}`}
             className="flex h-full min-w-0 flex-1 cursor-pointer flex-col items-center justify-end gap-[9px] rounded-nav focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
           >
             <span className="flex h-[130px] w-full items-end justify-center gap-1">
@@ -94,12 +76,7 @@ export function YearOverview() {
                 ) : null}
               </span>
             </span>
-            <span
-              className={cn(
-                "text-[11.5px] font-medium whitespace-nowrap",
-                bar.month === lastMonth ? "text-ink" : "text-muted-2",
-              )}
-            >
+            <span className="text-[11.5px] font-medium whitespace-nowrap text-muted-2">
               {bar.short}
             </span>
           </button>

@@ -1,26 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useHouse } from "@/components/house-store";
+import { usePathname, useRouter } from "next/navigation";
+import { useMe } from "@/components/hooks";
 import { HouseIcon, PaidTickIcon } from "@/components/icons";
 import { UpcomingDot } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { countLabel } from "@/lib/format";
+import { HOUSE_CONFIG } from "@/lib/config";
+import { api } from "@/lib/api";
+
+const HIDDEN_ON = ["/sign-in", "/register"];
 
 export function SiteHeader() {
-  const { state, config, lastMonth } = useHouse();
   const pathname = usePathname();
+  const router = useRouter();
+  const { data } = useMe();
+  const actor = data?.actor ?? null;
+
+  if (HIDDEN_ON.some((p) => pathname.startsWith(p))) return null;
 
   const links = [
     { href: "/", label: "The year", active: pathname === "/" },
-    {
-      href: `/month/${lastMonth + 1}`,
-      label: "One month",
-      active: pathname.startsWith("/month"),
-    },
+    { href: "/month", label: "One month", active: pathname.startsWith("/month") },
     { href: "/units", label: "Units & tenants", active: pathname.startsWith("/units") },
+    ...(actor?.role === "owner"
+      ? [{ href: "/accounts", label: "Accounts", active: pathname.startsWith("/accounts") }]
+      : []),
   ];
+
+  async function signOut() {
+    await api("/api/auth/sign-out", { method: "POST" }).catch(() => {});
+    router.push("/sign-in");
+    router.refresh();
+  }
 
   return (
     <header className="sticky top-0 z-20 border-b border-line-7 bg-white/90 backdrop-blur-[10px]">
@@ -29,7 +41,7 @@ export function SiteHeader() {
           <span className="grid size-7 place-items-center rounded-nav bg-ink text-white">
             <HouseIcon className="size-[15px]" />
           </span>
-          <span className="text-base font-semibold tracking-[-0.01em]">{config.houseName}</span>
+          <span className="text-base font-semibold tracking-[-0.01em]">{HOUSE_CONFIG.houseName}</span>
         </Link>
 
         <nav className="flex gap-[3px]">
@@ -49,7 +61,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-[18px]">
-          <div className="hidden items-center gap-3.5 text-[12.5px] text-muted sm:flex">
+          <div className="hidden items-center gap-3.5 text-[12.5px] text-muted lg:flex">
             <span className="flex items-center gap-1.5">
               <PaidTickIcon />
               Paid
@@ -59,9 +71,21 @@ export function SiteHeader() {
               Upcoming
             </span>
           </div>
-          <span className="text-[13px] text-muted-2">
-            {countLabel(state.units.length, "unit", "units")}
-          </span>
+          {actor ? (
+            <>
+              <span className="hidden text-[13px] text-muted-2 sm:inline">
+                {actor.email}
+                {actor.role === "viewer" ? " · view only" : ""}
+              </span>
+              <button
+                type="button"
+                onClick={signOut}
+                className="cursor-pointer text-[13px] font-medium text-muted hover:text-ink"
+              >
+                Sign out
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
     </header>

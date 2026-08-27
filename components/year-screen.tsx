@@ -1,57 +1,131 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { AddUnitForm } from "@/components/add-unit-form";
-import { useHouse } from "@/components/house-store";
-import { PlusIcon } from "@/components/icons";
-import { Button, ButtonLink, PageHeading } from "@/components/ui";
+import { useMe, useSheet, useUnlockYear } from "@/components/hooks";
+import { useViewState } from "@/components/view-state";
+import { Button, ButtonLink, Card, Loading, Notice, PageHeading, Select } from "@/components/ui";
 import { YearOverview } from "@/components/year-overview";
 import { YearSheet } from "@/components/year-sheet";
-import { yearHeadline } from "@/lib/derive";
+import { HOUSE_CONFIG } from "@/lib/config";
 import { downloadCsv, sheetToCsv } from "@/lib/export";
+import { formatAmount } from "@/lib/format";
+import { upcomingCount } from "@/lib/sheet";
+import { ApiError } from "@/lib/api";
 
 export function YearScreen() {
-  const { state, config, lastMonth } = useHouse();
-  const [formOpen, setFormOpen] = useState(false);
+  const year = useViewState((s) => s.year);
+  const setYear = useViewState((s) => s.setYear);
+  const { data, isPending, error, refetch } = useSheet(year);
+  const { data: me } = useMe();
+  const unlock = useUnlockYear();
+  const [billName, setBillName] = useState("");
+
+  const currency = HOUSE_CONFIG.currency;
+  const currentYear = new Date().getFullYear();
+  const isCurrent = year === currentYear;
+  const canEdit = me?.actor?.role === "owner" || me?.actor?.role === "super_admin";
+  const unlocked = me?.actor?.unlockedYear === year;
+  const editable = isCurrent || unlocked;
+
+  if (isPending) return <Loading label="Loading the sheet…" />;
+
+  if (error) {
+    return (
+      <section aria-label="The year">
+        <PageHeading title={`Bills and rent, ${year}`} />
+        <Notice tone="error">
+          {error instanceof ApiError ? error.message : "Could not load the sheet."}{" "}
+          <button type="button" onClick={() => void refetch()} className="underline">
+            Try again
+          </button>
+        </Notice>
+      </section>
+    );
+  }
+
+  const { sheet, totals, years } = data;
+  const left = upcomingCount(sheet);
+  const offered = [...new Set([currentYear, ...years, year])].sort((a, b) => b - a);
 
   return (
     <section aria-label="The year">
       <PageHeading
-        title={`Bills and rent, ${config.yearLabel}`}
-        subtitle={yearHeadline(state, config.currency)}
+        title={`Bills and rent, ${year}`}
+        subtitle={`You kept ${formatAmount(totals.kept, currency)} this year. ${
+          left === 0
+            ? "Everything is marked paid."
+            : `${left} ${left === 1 ? "cell is" : "cells are"} still upcoming.`
+        }`}
         actions={
           <>
-            <Button
-              onClick={() =>
-                downloadCsv(
-                  `bills-and-rent-${config.yearLabel}.csv`,
-                  sheetToCsv(state),
-                )
-              }
+            <label className="sr-only" htmlFor="year-picker">
+              Year
+            </label>
+            <Select
+              id="year-picker"
+              className="w-auto"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
             >
+              {offered.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </Select>
+            <Button onClick={() => downloadCsv(`bills-and-rent-${year}.csv`, sheetToCsv(sheet, currency))}>
               Export to Excel
             </Button>
-            <Button onClick={() => setFormOpen(true)}>
-              <PlusIcon className="size-3.5" />
-              Add a unit
-            </Button>
-            <ButtonLink variant="primary" href={`/month/${lastMonth + 1}`}>
+            <ButtonLink
+              variant="primary"
+              href={`/month/${year}/${isCurrent ? new Date().getMonth() + 1 : 1}`}
+            >
               Fill in a month
             </ButtonLink>
           </>
         }
       />
 
-      {formOpen ? (
-        <AddUnitForm
-          onClose={() => setFormOpen(false)}
-          submitLabel="Add the column"
-          hint="It joins the sheet as a new rent column, upcoming and empty for every month until you fill it in."
-        />
+      {!editable ? (
+        <div className="mb-5">
+          <Notice tone="info">
+            {year} is read-only.{" "}
+            {canEdit ? (
+              <button
+                type="button"
+                className="font-medium text-brand underline"
+                onClick={() => unlock.mutate(year)}
+                disabled={unlock.isPending}
+              >
+                {unlock.isPending ? "Unlocking…" : `Unlock ${year} for this session`}
+              </button>
+            ) : (
+              "Ask the owner if something needs correcting."
+            )}
+          </Notice>
+        </div>
       ) : null}
 
-      <YearOverview />
-      <YearSheet />
+      {unlock.error ? (
+        <div className="mb-5">
+          <Notice tone="error">
+            {unlock.error instanceof ApiError ? unlock.error.message : "Could not unlock that year."}
+          </Notice>
+        </div>
+      ) : null}
+
+      <YearOverview sheet={sheet} totals={totals} />
+      <YearSheet sheet={sheet} totals={totals} />
+
+      {sheet.units.length === 0 && sheet.billTypes.length === 0 ? (
+        <Card className="mt-4 px-5 py-6">
+          <p className="text-center text-[13px] text-muted">
+            Nothing to show yet. Add a unit and a tenant on{" "}
+            <Link href="/units">Units &amp; tenants</Link>, then add a bill below.
+          </p>
+        </Card>
+      ) : null}
 
       <p className="mt-4 text-[13px] text-muted-2">Click a month, or a bar, to fill it in.</p>
     </section>

@@ -1,66 +1,66 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { EntryRow } from "@/components/entry-row";
-import { useHouse } from "@/components/house-store";
-import { ButtonLink, Card, PageHeading, Select } from "@/components/ui";
-import { monthBillTotal, monthRentTotal, monthSummary } from "@/lib/derive";
+import { useState } from "react";
+import { useMe, useSetEntry } from "@/components/hooks";
+import { useQuery } from "@tanstack/react-query";
+import { StatusToggle } from "@/components/status-toggle";
+import { ButtonLink, Card, Field, Loading, Notice, PageHeading, Select } from "@/components/ui";
+import { api, ApiError, type Cell, type MonthRow } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import { HOUSE_CONFIG } from "@/lib/config";
 import { formatAmount, parseAmount } from "@/lib/format";
-import { BILL_KINDS, MONTH_NAMES } from "@/lib/seed";
+import { MONTH_NAMES } from "@/lib/seed";
+import { monthBillTotal, monthRentTotal } from "@/lib/sheet";
 
-function SectionCard({
-  title,
-  total,
-  children,
-}: {
-  title: string;
-  total: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card className="px-[22px] pt-[19px] pb-[21px]">
-      <div className="mb-3.5 flex items-baseline gap-2.5">
-        <h2 className="text-[17px] font-semibold">{title}</h2>
-        <span className="num ml-auto text-[21px] font-semibold">{total}</span>
-      </div>
-      <div className="flex flex-col gap-[11px]">{children}</div>
-    </Card>
-  );
-}
+type MonthResponse = {
+  year: number;
+  month: number;
+  billTypes: { id: number; name: string; active: boolean }[];
+  tenancies: { id: number; unitLabel: string; tenantName: string; expectedRent: number }[];
+  totals: { rent: number; bills: number; kept: number };
+  cells: MonthRow;
+};
 
-function Total({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div>
-      <div className="mb-1 text-[12.5px] font-medium text-muted">{label}</div>
-      <div
-        className={`num text-left text-[27px] font-semibold tracking-[-0.024em] ${
-          accent ? "text-brand" : ""
-        }`}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-export function MonthScreen({ month }: { month: number }) {
-  const { state, config, dispatch, rememberMonth } = useHouse();
+export function MonthScreen({ year, month }: { year: number; month: number }) {
   const router = useRouter();
+  const { data: me } = useMe();
+  const setEntry = useSetEntry();
 
-  useEffect(() => {
-    rememberMonth(month);
-  }, [month, rememberMonth]);
+  const { data, isPending, error } = useQuery({
+    queryKey: ["month", year, month],
+    queryFn: () => api<MonthResponse>(`/api/months/${year}/${month}`),
+  });
 
-  const bills = monthBillTotal(state, month);
-  const rent = monthRentTotal(state, month);
-  const currency = config.currency;
+  const currency = HOUSE_CONFIG.currency;
+  const currentYear = new Date().getFullYear();
+  const canEdit = me?.actor?.role === "owner" || me?.actor?.role === "super_admin";
+  const editable = canEdit && (year === currentYear || me?.actor?.unlockedYear === year);
+
+  if (isPending) return <Loading label="Loading the month…" />;
+  if (error) {
+    return (
+      <section aria-label="One month">
+        <PageHeading title={`${MONTH_NAMES[month - 1]} ${year}`} />
+        <Notice tone="error">
+          {error instanceof ApiError ? error.message : "Could not load this month."}
+        </Notice>
+      </section>
+    );
+  }
+
+  const rentTotal = monthRentTotal(data.cells);
+  const billTotal = monthBillTotal(data.cells);
 
   return (
     <section aria-label="One month">
       <PageHeading
-        title={`${MONTH_NAMES[month]} ${config.yearLabel}`}
-        subtitle={monthSummary(state, month, currency)}
+        title={`${MONTH_NAMES[month - 1]} ${year}`}
+        subtitle={
+          rentTotal === 0
+            ? `No rent booked this month. Bills came to ${formatAmount(billTotal, currency)}.`
+            : `${formatAmount(rentTotal, currency)} in, ${formatAmount(billTotal, currency)} out — ${formatAmount(rentTotal - billTotal, currency)} left over.`
+        }
         actions={
           <>
             <label className="sr-only" htmlFor="month-picker">
@@ -70,10 +70,10 @@ export function MonthScreen({ month }: { month: number }) {
               id="month-picker"
               className="w-auto"
               value={month}
-              onChange={(e) => router.push(`/month/${Number(e.target.value) + 1}`)}
+              onChange={(e) => router.push(`/month/${year}/${e.target.value}`)}
             >
               {MONTH_NAMES.map((name, i) => (
-                <option key={name} value={i}>
+                <option key={name} value={i + 1}>
                   {name}
                 </option>
               ))}
@@ -83,62 +83,170 @@ export function MonthScreen({ month }: { month: number }) {
         }
       />
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(380px,1fr))] items-start gap-6">
-        <SectionCard title="Bills" total={formatAmount(bills, currency)}>
-          {BILL_KINDS.map((bill, i) => (
-            <EntryRow
-              key={bill.key}
-              label={bill.label}
-              entry={state.bills[month][i]}
-              placeholder="0"
-              onAmountChange={(value) =>
-                dispatch({ type: "setBillAmount", month, bill: i, amount: parseAmount(value) })
-              }
-              onStatusChange={(status) =>
-                dispatch({ type: "setBillStatus", month, bill: i, status })
-              }
-            />
-          ))}
-        </SectionCard>
+      {!editable ? (
+        <div className="mb-5">
+          <Notice tone="info">
+            {canEdit
+              ? `${year} is read-only. Unlock it from the year screen to change anything here.`
+              : "This account can view the sheet but not change it."}
+          </Notice>
+        </div>
+      ) : null}
 
-        <SectionCard title="Rent" total={formatAmount(rent, currency)}>
-          {state.units.length === 0 ? (
-            <p className="text-[13px] text-muted-2">
-              No units yet. Add one from the year sheet and it shows up here.
-            </p>
-          ) : (
-            state.units.map((unit) => (
-              <EntryRow
-                key={unit.key}
-                label={unit.label}
-                boldLabel
-                entry={unit.rent[month]}
-                placeholder={unit.expected ? String(unit.expected) : "0"}
-                onAmountChange={(value) =>
-                  dispatch({
-                    type: "setRentAmount",
-                    month,
-                    unitKey: unit.key,
-                    amount: parseAmount(value),
-                  })
-                }
-                onStatusChange={(status) =>
-                  dispatch({ type: "setRentStatus", month, unitKey: unit.key, status })
-                }
-              />
-            ))
-          )}
-        </SectionCard>
+      {setEntry.error ? (
+        <div className="mb-5">
+          <Notice tone="error">
+            {setEntry.error instanceof ApiError
+              ? setEntry.error.message
+              : "That change did not save."}
+          </Notice>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(380px,1fr))] items-start gap-6">
+        <Card className="px-[22px] pt-[19px] pb-[21px]">
+          <div className="mb-3.5 flex items-baseline gap-2.5">
+            <h2 className="text-[17px] font-semibold">Bills</h2>
+            <span className="num ml-auto text-[21px] font-semibold">
+              {formatAmount(billTotal, currency)}
+            </span>
+          </div>
+          <div className="flex flex-col gap-[11px]">
+            {data.billTypes.length === 0 ? (
+              <p className="text-[13px] text-muted-2">
+                No bill types yet. Add one and it becomes a column on the sheet.
+              </p>
+            ) : (
+              data.billTypes.map((bill) => (
+                <EntryRow
+                  key={bill.id}
+                  label={bill.name}
+                  cell={data.cells.bills[bill.id]}
+                  placeholder="0"
+                  editable={editable}
+                  onAmount={(amount) =>
+                    setEntry.mutate({ kind: "bill", targetId: bill.id, year, month, amount })
+                  }
+                  onStatus={(status) =>
+                    setEntry.mutate({ kind: "bill", targetId: bill.id, year, month, status })
+                  }
+                />
+              ))
+            )}
+          </div>
+        </Card>
+
+        <Card className="px-[22px] pt-[19px] pb-[21px]">
+          <div className="mb-3.5 flex items-baseline gap-2.5">
+            <h2 className="text-[17px] font-semibold">Rent</h2>
+            <span className="num ml-auto text-[21px] font-semibold">
+              {formatAmount(rentTotal, currency)}
+            </span>
+          </div>
+          <div className="flex flex-col gap-[11px]">
+            {data.tenancies.length === 0 ? (
+              <p className="text-[13px] text-muted-2">
+                Nobody was renting this month. Assign a tenant to a unit and this fills in.
+              </p>
+            ) : (
+              data.tenancies.map((tenancy) => {
+                const unitId = Number(
+                  Object.keys(data.cells.rent).find(
+                    (id) => data.cells.rent[Number(id)].tenantName === tenancy.tenantName,
+                  ) ?? 0,
+                );
+                return (
+                  <EntryRow
+                    key={tenancy.id}
+                    label={tenancy.unitLabel}
+                    boldLabel
+                    cell={data.cells.rent[unitId] ?? { amount: 0, status: "upcoming" }}
+                    placeholder={String(tenancy.expectedRent || 0)}
+                    editable={editable}
+                    onAmount={(amount) =>
+                      setEntry.mutate({ kind: "rent", targetId: tenancy.id, year, month, amount })
+                    }
+                    onStatus={(status) =>
+                      setEntry.mutate({ kind: "rent", targetId: tenancy.id, year, month, status })
+                    }
+                  />
+                );
+              })
+            )}
+          </div>
+        </Card>
       </div>
 
       <Card className="mt-6 flex flex-wrap items-center gap-[34px] px-6 py-5">
-        <Total label="Rent this month" value={formatAmount(rent, currency)} />
-        <Total label="Bills this month" value={formatAmount(bills, currency)} />
-        <Total label="Left over" value={formatAmount(rent - bills, currency)} accent />
+        <Total label="Rent this month" value={formatAmount(rentTotal, currency)} />
+        <Total label="Bills this month" value={formatAmount(billTotal, currency)} />
+        <Total label="Left over" value={formatAmount(rentTotal - billTotal, currency)} accent />
         <ButtonLink variant="primary" href="/" className="ml-auto">
           Done
         </ButtonLink>
       </Card>
     </section>
+  );
+}
+
+function Total({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div>
+      <div className="mb-1 text-[12.5px] font-medium text-muted">{label}</div>
+      <div
+        className={cn(
+          "num text-left text-[27px] font-semibold tracking-[-0.024em]",
+          accent && "text-brand",
+        )}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function EntryRow({
+  label,
+  cell,
+  placeholder,
+  editable,
+  boldLabel = false,
+  onAmount,
+  onStatus,
+}: {
+  label: string;
+  cell: Cell;
+  placeholder: string;
+  editable: boolean;
+  boldLabel?: boolean;
+  onAmount: (amount: number) => void;
+  onStatus: (status: "paid" | "upcoming") => void;
+}) {
+  const [draft, setDraft] = useState(cell.amount === 0 ? "" : String(cell.amount));
+
+  return (
+    <div className="flex items-center gap-[13px]">
+      <span className={cn("w-[74px] shrink-0 text-sm", boldLabel ? "font-semibold" : "font-medium")}>
+        {label}
+      </span>
+      <Field
+        inputMode="numeric"
+        className="num min-w-0 flex-1"
+        value={draft}
+        placeholder={placeholder}
+        disabled={!editable}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const amount = parseAmount(draft);
+          if (amount !== cell.amount) onAmount(amount);
+        }}
+      />
+      <StatusToggle
+        value={cell.status}
+        disabled={!editable}
+        onChange={onStatus}
+        label={label}
+      />
+    </div>
   );
 }

@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Figtree } from "next/font/google";
-import { HouseProvider } from "@/components/house-store";
+import { QueryProvider } from "@/components/query-provider";
 import { SiteHeader } from "@/components/site-header";
-import { StorageNotice } from "@/components/storage-notice";
 import { HOUSE_CONFIG } from "@/lib/config";
 import "./globals.css";
 
@@ -18,20 +17,17 @@ export const metadata: Metadata = {
     default: `Bills and rent · ${HOUSE_CONFIG.houseName}`,
     template: `%s · ${HOUSE_CONFIG.houseName}`,
   },
-  description: `Rent collected and bills paid across ${HOUSE_CONFIG.yearLabel}, one sheet.`,
+  description: "Rent collected and bills paid, one sheet, kept year after year.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={figtree.variable}>
       <body className="min-h-screen bg-canvas font-sans text-ink antialiased">
-        <HouseProvider>
+        <QueryProvider>
           <SiteHeader />
-          <main className="mx-auto max-w-[1340px] px-[30px] pt-[30px] pb-16">
-            <StorageNotice />
-            {children}
-          </main>
-        </HouseProvider>
+          <main className="mx-auto max-w-[1340px] px-[30px] pt-[30px] pb-16">{children}</main>
+        </QueryProvider>
       </body>
     </html>
   );

@@ -1,6 +1,6 @@
-import { billColumnTotal, monthBillTotal, monthRentTotal, unitYearTotal, yearBillTotal, yearRentTotal } from "@/lib/derive";
-import { BILL_KINDS, MONTH_NAMES } from "@/lib/seed";
-import type { HouseState } from "@/lib/types";
+import type { Sheet } from "@/lib/api";
+import { MONTH_NAMES } from "@/lib/seed";
+import { billTypeTotal, monthBillTotal, monthRentTotal, unitTotal } from "@/lib/sheet";
 
 function escapeCell(value: string | number): string {
   const text = String(value);
@@ -8,33 +8,33 @@ function escapeCell(value: string | number): string {
 }
 
 /** The whole sheet as CSV — Excel and Sheets both open it directly. */
-export function sheetToCsv(state: HouseState): string {
+export function sheetToCsv(sheet: Sheet, _currency?: string): string {
   const rows: (string | number)[][] = [];
 
   rows.push([
     "Month",
-    ...BILL_KINDS.map((b) => b.label),
+    ...sheet.billTypes.map((b) => (b.active ? b.name : `${b.name} (retired)`)),
     "Bills total",
-    ...state.units.map((u) => u.label),
+    ...sheet.units.map((u) => u.label),
     "Rent total",
   ]);
 
-  MONTH_NAMES.forEach((name, month) => {
+  for (const row of sheet.months) {
     rows.push([
-      name,
-      ...state.bills[month].map((e) => e.amount),
-      monthBillTotal(state, month),
-      ...state.units.map((u) => u.rent[month]?.amount ?? 0),
-      monthRentTotal(state, month),
+      MONTH_NAMES[row.month - 1],
+      ...sheet.billTypes.map((b) => row.bills[b.id]?.amount ?? 0),
+      monthBillTotal(row),
+      ...sheet.units.map((u) => row.rent[u.id]?.amount ?? 0),
+      monthRentTotal(row),
     ]);
-  });
+  }
 
   rows.push([
     "Total individual",
-    ...BILL_KINDS.map((_, i) => billColumnTotal(state, i)),
-    yearBillTotal(state),
-    ...state.units.map(unitYearTotal),
-    yearRentTotal(state),
+    ...sheet.billTypes.map((b) => billTypeTotal(sheet, b.id)),
+    sheet.months.reduce((total, row) => total + monthBillTotal(row), 0),
+    ...sheet.units.map((u) => unitTotal(sheet, u.id)),
+    sheet.months.reduce((total, row) => total + monthRentTotal(row), 0),
   ]);
 
   return rows.map((row) => row.map(escapeCell).join(",")).join("\r\n");

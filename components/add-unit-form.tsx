@@ -1,82 +1,69 @@
 "use client";
 
-import { useId, useState } from "react";
-import { useHouse, type UnitDraft } from "@/components/house-store";
-import { Button, Card, Field, Label } from "@/components/ui";
+import { useId, useState, type FormEvent } from "react";
+import { useCreateUnit } from "@/components/hooks";
+import { Button, Card, Field, Label, Notice } from "@/components/ui";
+import { ApiError } from "@/lib/api";
 
-const EMPTY: UnitDraft = { label: "", floor: "", rent: "", name: "" };
-
-export function AddUnitForm({
-  onClose,
-  submitLabel,
-  hint,
-}: {
-  onClose: () => void;
-  submitLabel: string;
-  /** Explains what adding a unit does to the sheet, where there is room to say it. */
-  hint?: string;
-}) {
-  const { dispatch } = useHouse();
-  const [draft, setDraft] = useState<UnitDraft>(EMPTY);
+export function AddUnitForm({ onClose }: { onClose: () => void }) {
   const ids = useId();
+  const create = useCreateUnit();
+  const [label, setLabel] = useState("");
+  const [floor, setFloor] = useState("");
 
-  const set = (field: keyof UnitDraft) => (value: string) =>
-    setDraft((d) => ({ ...d, [field]: value }));
-
-  const incomplete = draft.label.trim() === "";
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (incomplete) return;
-    dispatch({ type: "addUnit", draft });
-    setDraft(EMPTY);
-    onClose();
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (label.trim() === "") return;
+    try {
+      await create.mutateAsync({ label, floor });
+      setLabel("");
+      setFloor("");
+      onClose();
+    } catch {
+      /* The error renders below; the form stays open so nothing is retyped. */
+    }
   }
-
-  const fields: {
-    key: keyof UnitDraft;
-    label: string;
-    placeholder: string;
-    width: string;
-    numeric?: boolean;
-  }[] = [
-    { key: "label", label: "Unit name", placeholder: "F2(B)", width: "w-[148px]" },
-    { key: "floor", label: "Where it is", placeholder: "Second floor, back", width: "w-[196px]" },
-    { key: "rent", label: "Monthly rent", placeholder: "6000", width: "w-[142px]", numeric: true },
-    {
-      key: "name",
-      label: "Tenant, if any",
-      placeholder: "Leave blank if empty",
-      width: "w-[186px]",
-    },
-  ];
 
   return (
     <Card className="mb-6 border-brand/30 bg-white px-[19px] pt-[17px] pb-[19px]">
       <form onSubmit={submit}>
         <h2 className="mb-3.5 text-[15px] font-semibold">Add a unit</h2>
         <div className="flex flex-wrap items-end gap-[13px]">
-          {fields.map((f) => (
-            <div key={f.key} className={f.width}>
-              <Label htmlFor={`${ids}-${f.key}`}>{f.label}</Label>
-              <Field
-                id={`${ids}-${f.key}`}
-                className={f.numeric ? "num" : undefined}
-                inputMode={f.numeric ? "numeric" : undefined}
-                value={draft[f.key]}
-                placeholder={f.placeholder}
-                onChange={(e) => set(f.key)(e.target.value)}
-              />
-            </div>
-          ))}
-          <Button type="submit" variant="primary" disabled={incomplete}>
-            {submitLabel}
+          <div className="w-[148px]">
+            <Label htmlFor={`${ids}-label`}>Unit name</Label>
+            <Field
+              id={`${ids}-label`}
+              value={label}
+              placeholder="F2(B)"
+              onChange={(e) => setLabel(e.target.value)}
+            />
+          </div>
+          <div className="w-[196px]">
+            <Label htmlFor={`${ids}-floor`}>Where it is</Label>
+            <Field
+              id={`${ids}-floor`}
+              value={floor}
+              placeholder="Second floor, back"
+              onChange={(e) => setFloor(e.target.value)}
+            />
+          </div>
+          <Button type="submit" variant="primary" disabled={label.trim() === "" || create.isPending}>
+            {create.isPending ? "Adding…" : "Add the unit"}
           </Button>
           <Button type="button" onClick={onClose}>
             Cancel
           </Button>
         </div>
-        {hint ? <p className="mt-3 text-[13px] text-muted">{hint}</p> : null}
+        {create.error ? (
+          <div className="mt-3">
+            <Notice tone="error">
+              {create.error instanceof ApiError ? create.error.message : "Could not add that unit."}
+            </Notice>
+          </div>
+        ) : null}
+        <p className="mt-3 text-[13px] text-muted">
+          A unit is just the room. Assign a tenant to it once both exist.
+        </p>
       </form>
     </Card>
   );
