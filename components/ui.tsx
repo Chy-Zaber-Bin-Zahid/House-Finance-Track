@@ -120,3 +120,45 @@ export function PageHeading({
     </div>
   );
 }
+
+/**
+ * The app can now fail, which it never could when everything lived in the
+ * browser. One shape for saying so, so eight screens do not each invent their
+ * own.
+ */
+export function Notice({
+  tone,
+  children,
+}: {
+  tone: "error" | "success" | "info";
+  children: ReactNode;
+}) {
+  const palette = {
+    error: "border-amber/45 bg-amber-tint text-amber-ink",
+    success: "border-brand/30 bg-brand-tint text-brand-deep",
+    info: "border-line-13 bg-surface text-muted",
+  }[tone];
+
+  return (
+    <p
+      role={tone === "error" ? "alert" : "status"}
+      className={cn("rounded-field border px-[13px] py-2.5 text-[13px]", palette)}
+    >
+      {children}
+    </p>
+  );
+}
+
+/** What a screen shows while it waits for the server. */
+export function Loading({ label = "Loading…" }: { label?: string }) {
+  return (
+    <p role="status" className="py-8 text-center text-[13px] text-muted">
+      {label}
+    </p>
+  );
+}
+
+/** What a list shows when there is genuinely nothing in it yet. */
+export function Empty({ children }: { children: ReactNode }) {
+  return <p className="px-5 py-6 text-center text-[13px] text-muted">{children}</p>;
+}
