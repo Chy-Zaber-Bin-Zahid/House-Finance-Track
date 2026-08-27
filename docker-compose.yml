@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: house-finance-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: house
+      POSTGRES_PASSWORD: house
+      POSTGRES_DB: house
+    ports:
+      # Override with DB_PORT when 5437 is taken; this machine already
+      # runs several Postgres containers across 5432-5436.
+      - "${DB_PORT:-5437}:5432"
+    volumes:
+      - house-db-data:/var/lib/postgresql/data
+      # Creates the second database the test suite runs against, so tests never
+      # share a database with development data.
+      - ./db/init/01-test-database.sql:/docker-entrypoint-initdb.d/01-test-database.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U house -d house"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  house-db-data:
