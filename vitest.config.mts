@@ -15,6 +15,13 @@ export default defineConfig({
         test: {
           name: "server",
           environment: "node",
+          /*
+           * These files share one Postgres database and truncate it between
+           * tests, so running them concurrently makes each one delete the
+           * other's rows. Serial here costs a second; parallel makes failures
+           * lie about which change broke what.
+           */
+          fileParallelism: false,
           include: [
             "lib/**/*.test.ts",
             "data/**/*.test.ts",
