@@ -106,6 +106,16 @@ export function YearScreen() {
         </div>
       ) : null}
 
+      {unlock.data?.relocked ? (
+        <div className="mb-5">
+          <Notice tone="info">
+            {unlock.data.relocked} locked again — a session holds one unlocked year at a time, so
+            opening {year} closed it. Another tab showing {unlock.data.relocked} will refuse saves
+            until you unlock it there.
+          </Notice>
+        </div>
+      ) : null}
+
       {unlock.error ? (
         <div className="mb-5">
           <Notice tone="error">

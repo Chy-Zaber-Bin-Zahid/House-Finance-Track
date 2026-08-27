@@ -128,7 +128,10 @@ export function useSetBillTypeActive() {
 export function useUnlockYear() {
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: (year: number) => api(`/api/years/${year}/unlock`, { method: "POST" }),
+    mutationFn: (year: number) =>
+      api<{ unlockedYear: number; relocked: number | null }>(`/api/years/${year}/unlock`, {
+        method: "POST",
+      }),
     onSuccess: () => invalidate("sheet", "me"),
   });
 }
