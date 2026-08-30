@@ -132,3 +132,19 @@ export function EyeOffIcon(props: IconProps) {
     </Line>
   );
 }
+
+export function MenuIcon(props: IconProps) {
+  return (
+    <Line {...props}>
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </Line>
+  );
+}
+
+export function CloseIcon(props: IconProps) {
+  return (
+    <Line {...props}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </Line>
+  );
+}

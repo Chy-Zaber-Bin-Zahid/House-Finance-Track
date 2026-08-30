@@ -15,7 +15,7 @@ function Stat({ label, value, accent = false }: { label: string; value: string; 
       <div className="mb-[5px] text-[12.5px] font-medium text-muted">{label}</div>
       <div
         className={cn(
-          "num text-left text-[34px] leading-none font-semibold tracking-[-0.028em]",
+          "num text-left text-[26px] leading-none font-semibold tracking-[-0.028em] sm:text-[34px]",
           accent && "text-brand",
         )}
       >

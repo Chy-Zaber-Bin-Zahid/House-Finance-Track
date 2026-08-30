@@ -108,7 +108,7 @@ export function AuthForm({
         <div className="mx-auto w-full max-w-[380px]">
           <LogoLockup className="mb-7 h-[104px] w-[101px]" />
 
-          <h1 className="mb-1 text-[26px] font-semibold tracking-[-0.02em]">{title}</h1>
+          <h1 className="mb-1 text-[22px] font-semibold tracking-[-0.02em] sm:text-[26px]">{title}</h1>
           <p className="mb-6 text-sm text-muted">{intro}</p>
 
         {done && "message" in onDone ? (

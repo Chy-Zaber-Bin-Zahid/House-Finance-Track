@@ -113,7 +113,7 @@ export function TenantScreen({ tenantId }: { tenantId: number }) {
           />
 
           <div className="mb-[18px] flex flex-wrap items-center gap-2.5">
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{tenant.name}</h1>
+            <h1 className="text-[20px] font-semibold tracking-[-0.02em] sm:text-[22px]">{tenant.name}</h1>
             {current ? (
               <Pill className="bg-brand-tint text-brand-deep">{current.unitLabel}</Pill>
             ) : (
@@ -199,11 +199,14 @@ export function TenantScreen({ tenantId }: { tenantId: number }) {
                         >
                           <th
                             scope="row"
-                            className="w-[150px] p-[11px] pl-0 text-left text-sm font-normal"
+                            /* Fixed widths left "January 2026" breaking over two
+                             * lines in a 390px card; let the columns size
+                             * themselves and keep each label on one line. */
+                            className="p-[11px] pl-0 text-left text-sm font-normal whitespace-nowrap sm:w-[150px]"
                           >
                             {MONTH_NAMES[entry.month - 1]} {entry.year}
                           </th>
-                          <td className="num w-[130px] p-[11px] text-right text-sm">
+                          <td className="num p-[11px] text-right text-sm whitespace-nowrap sm:w-[130px]">
                             {formatAmount(entry.amount, currency)}
                           </td>
                           <td className="p-[11px] text-sm">

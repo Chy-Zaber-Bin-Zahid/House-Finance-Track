@@ -133,8 +133,8 @@ export function PageHeading({
   return (
     <div className="mb-[26px] flex flex-wrap items-end gap-5">
       <div>
-        <h1 className="mb-[5px] text-[30px] font-semibold tracking-[-0.022em]">{title}</h1>
-        {subtitle ? <p className="text-[15px] text-muted">{subtitle}</p> : null}
+        <h1 className="mb-[5px] text-[24px] font-semibold tracking-[-0.022em] sm:text-[30px]">{title}</h1>
+        {subtitle ? <p className="text-[14px] text-muted sm:text-[15px]">{subtitle}</p> : null}
       </div>
       {actions ? (
         /* `sm:ml-auto`, not `ml-auto`: once the row wraps on a phone the

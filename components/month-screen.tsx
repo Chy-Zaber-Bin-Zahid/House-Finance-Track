@@ -109,7 +109,7 @@ export function MonthScreen({ year, month }: { year: number; month: number }) {
         <Card className="px-[22px] pt-[19px] pb-[21px]">
           <div className="mb-3.5 flex items-baseline gap-2.5">
             <h2 className="text-[17px] font-semibold">Bills</h2>
-            <span className="num ml-auto text-[21px] font-semibold">
+            <span className="num ml-auto text-[18px] font-semibold sm:text-[21px]">
               {formatAmount(billTotal, currency)}
             </span>
           </div>
@@ -154,7 +154,7 @@ export function MonthScreen({ year, month }: { year: number; month: number }) {
         <Card className="px-[22px] pt-[19px] pb-[21px]">
           <div className="mb-3.5 flex items-baseline gap-2.5">
             <h2 className="text-[17px] font-semibold">Rent</h2>
-            <span className="num ml-auto text-[21px] font-semibold">
+            <span className="num ml-auto text-[18px] font-semibold sm:text-[21px]">
               {formatAmount(rentTotal, currency)}
             </span>
           </div>
@@ -220,7 +220,7 @@ function Total({ label, value, accent = false }: { label: string; value: string;
       <div className="mb-1 text-[12.5px] font-medium text-muted">{label}</div>
       <div
         className={cn(
-          "num text-left text-[27px] font-semibold tracking-[-0.024em]",
+          "num text-left text-[22px] font-semibold tracking-[-0.024em] sm:text-[27px]",
           accent && "text-brand",
         )}
       >

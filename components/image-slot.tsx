@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useInvalidate } from "@/components/hooks";
 import { ImageFileIcon } from "@/components/icons";
 import { api, ApiError, type StoredDocument } from "@/lib/api";
@@ -28,6 +28,14 @@ export function ImageSlot({
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /*
+   * A row can outlive its bytes — an object deleted from the bucket by hand, or
+   * a development store that does not survive a restart. Without this the
+   * browser paints its broken-image glyph across the whole slot; the empty
+   * state at least says what to do about it.
+   */
+  const [missing, setMissing] = useState(false);
+  useEffect(() => setMissing(false), [photo?.id]);
 
   async function accept(file: File | undefined) {
     if (!file) return;
@@ -90,15 +98,24 @@ export function ImageSlot({
           dragging && "bg-brand-wash ring-2 ring-brand ring-inset",
         )}
       >
-        {photo ? (
+        {photo && !missing ? (
           /* Served by a route that re-checks the session, so next/image cannot help here. */
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={`/api/files/${photo.id}`} alt="" className="absolute inset-0 size-full object-cover" />
+          <img
+            src={`/api/files/${photo.id}`}
+            alt=""
+            onError={() => setMissing(true)}
+            className="absolute inset-0 size-full object-cover"
+          />
         ) : (
           <>
             <ImageFileIcon className="size-6 text-muted-2" />
             <span className="text-[13px] font-medium text-muted">
-              {editable ? placeholder : "No photo"}
+              {missing
+                ? "That photo is no longer in storage"
+                : editable
+                  ? placeholder
+                  : "No photo"}
             </span>
             {editable ? (
               <span className="text-xs text-muted-2">Drop a file, or click to browse</span>

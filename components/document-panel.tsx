@@ -70,7 +70,7 @@ export function DocumentPanel({
 
   return (
     <Card className="px-[22px] pt-[19px] pb-[22px]">
-      <div className="mb-1.5 flex items-baseline gap-2.5">
+      <div className="mb-1.5 flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2.5">
         <h2 className="text-[17px] font-semibold">Documents</h2>
         <span className="text-[13px] text-muted-2">
           {files.length === 0 ? "None yet" : countLabel(files.length, "file", "files")} · only the
