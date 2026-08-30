@@ -96,7 +96,7 @@ apart from the example.
 | `R2_SECRET_ACCESS_KEY` | for files | " |
 | `R2_BUCKET` | for files | Use a separate bucket per environment, so a leaked development credential cannot reach real files. |
 | `ALLOW_MEMORY_FILES` | no | Set to `true` to run `next start` without R2 and accept that uploads are lost on restart. |
-| `TRUSTED_PROXY_HOPS` | no | How many proxies sit in front of the app. Only set this if you run behind one — it decides how far into `X-Forwarded-For` the rate limiter looks. Left unset, the header is ignored entirely. |
+| `TRUSTED_PROXY_HOPS` | in production | How many proxies sit in front of the app. It decides how far into `X-Forwarded-For` the rate limiter looks. Left unset the header is ignored entirely, callers cannot be told apart, and the per-caller limits do not run — see [Rate limiting](#rate-limiting). |
 
 ---
 
@@ -137,6 +137,36 @@ Two rules worth knowing:
   handler, including ones added later.
 - **The year unlock is per session.** Another super-admin looking at the same year still sees it
   read-only, and the unlock dies with the session.
+
+---
+
+## Rate limiting
+
+Four things are limited, in memory, per process:
+
+| Guarded | Limit | Keyed on |
+| --- | --- | --- |
+| Sign-in | 5 per 15 min | the email |
+| Sign-in | 20 per 15 min | the caller's address |
+| Registration | 5 per hour | the caller's address |
+| Password change | 5 per 15 min | the account |
+
+This is a backstop against **password guessing**, not a defence against a denial
+of service. It runs inside the application, so a request has already reached
+Node — and often already cost a database round trip — before a counter is
+consulted. Anything volumetric has to be stopped in front of the app:
+Cloudflare, a WAF, or `limit_req` in nginx.
+
+**The limits keyed on the caller only run when the caller can be identified**,
+which needs `TRUSTED_PROXY_HOPS` set to the number of proxies in front of the
+app. Without it those limits are skipped rather than applied to everybody at
+once — a shared bucket would mean a stranger could spend the household's
+allowance and lock everyone out of sign-in, which is the failure a rate limit is
+supposed to prevent. The per-email limit still runs either way, and it is the
+one that actually protects an account.
+
+The counters live in process memory, so a restart clears them and a second
+instance would keep its own.
 
 ---
 

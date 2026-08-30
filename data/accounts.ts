@@ -4,7 +4,9 @@ import { accounts, sessions } from "@/db/schema";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword, WeakPassword } from "./passwords";
 import {
   consume,
+  consumePerCaller,
   reset,
+  resetPerCaller,
   SIGN_IN_PER_ADDRESS,
   SIGN_IN_PER_EMAIL,
 } from "./rate-limit";
@@ -32,12 +34,14 @@ export async function signIn(
   db: Database,
   email: string,
   password: string,
-  address: string,
+  address: string | null,
 ): Promise<SignInResult> {
   const normalised = email.trim().toLowerCase();
 
   if (!consume(`signin:email:${normalised}`, SIGN_IN_PER_EMAIL)) return { ok: false, reason: "throttled" };
-  if (!consume(`signin:addr:${address}`, SIGN_IN_PER_ADDRESS)) return { ok: false, reason: "throttled" };
+  if (!consumePerCaller("signin:addr", address, SIGN_IN_PER_ADDRESS)) {
+    return { ok: false, reason: "throttled" };
+  }
 
   const [account] = await db.select().from(accounts).where(eq(accounts.email, normalised)).limit(1);
 
@@ -54,7 +58,10 @@ export async function signIn(
     expiresAt: sessionExpiry(),
   });
 
+  /* Both counts, not just the email's: someone who just proved who they are has
+   * not been attacking the address they arrived from. */
   reset(`signin:email:${normalised}`);
+  resetPerCaller("signin:addr", address);
   return { ok: true, token, accountId: account.id };
 }
 
