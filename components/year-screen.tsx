@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useMe, useSheet, useUnlockYear } from "@/components/hooks";
 import { useViewState } from "@/components/view-state";
-import { Button, ButtonLink, Card, Loading, Notice, PageHeading, Select } from "@/components/ui";
+import { Button, ButtonLink, Card, Loading, Notice, PageHeading, Select, TextLink } from "@/components/ui";
 import { YearOverview } from "@/components/year-overview";
 import { YearSheet } from "@/components/year-sheet";
 import { HOUSE_CONFIG } from "@/lib/config";
@@ -63,7 +63,7 @@ export function YearScreen() {
             </label>
             <Select
               id="year-picker"
-              className="w-auto"
+              className="w-auto shrink-0"
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
             >
@@ -131,7 +131,7 @@ export function YearScreen() {
         <Card className="mt-4 px-5 py-6">
           <p className="text-center text-[13px] text-muted">
             Nothing to show yet. Add a unit and a tenant on{" "}
-            <Link href="/units">Units &amp; tenants</Link>, then add a bill below.
+            <TextLink href="/units">Units</TextLink>, then add a bill below.
           </p>
         </Card>
       ) : null}

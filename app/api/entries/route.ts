@@ -1,3 +1,4 @@
+import { describeEntry, monthLabel, record } from "@/data/audit";
 import { requireEditor, requireEditorForYear } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
 import { setBillAmount, setRentAmount, type EntryStatus } from "@/data/ledger";
@@ -39,13 +40,27 @@ export async function POST(request: Request) {
     }
 
     /* Editing a year that is not the current one needs an unlock this session holds. */
-    requireEditorForYear(await currentActor(), body.year);
+    const actor = requireEditorForYear(await currentActor(), body.year);
 
     const patch = { amount: body.amount, status: body.status };
     const entry =
       body.kind === "rent"
         ? await setRentAmount(db, body.targetId, body.year, body.month, patch)
         : await setBillAmount(db, body.targetId, body.year, body.month, patch);
+
+    const target = await describeEntry(db, body.kind, body.targetId);
+    await record(
+      db,
+      actor,
+      body.kind === "rent" ? "entry.rent_set" : "entry.bill_set",
+      `${target} · ${monthLabel(body.year, body.month)}`,
+      [
+        body.amount === undefined ? null : `Set to ${body.amount}`,
+        body.status === undefined ? null : `Marked ${body.status}`,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    );
 
     return Response.json({ entry });
   } catch (error) {

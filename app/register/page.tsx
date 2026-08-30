@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TextLink } from "@/components/ui";
 import { AuthForm } from "@/components/auth-form";
 
 export const metadata = { title: "Ask for access" };
@@ -16,7 +16,7 @@ export default function RegisterPage() {
       }}
       footer={
         <>
-          Already have access? <Link href="/sign-in">Sign in</Link>.
+          Already have access? <TextLink href="/sign-in">Sign in</TextLink>.
         </>
       }
     />

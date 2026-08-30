@@ -1,9 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
-import { Button, Card, Field, Label } from "@/components/ui";
-import { HouseIcon } from "@/components/icons";
+import { EyeIcon, EyeOffIcon } from "@/components/icons";
+import { MIN_PASSWORD_LENGTH } from "@/lib/limits";
+import { Button, Field, Label } from "@/components/ui";
+import { LogoLockup } from "@/components/logo";
+import signInImage from "@/public/sign-in.jpg";
 
 /**
  * The shape both sign-in and registration share. New here: the app can now
@@ -34,6 +38,7 @@ export function AuthForm({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, setPending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -64,17 +69,47 @@ export function AuthForm({
   }
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-[420px] flex-col justify-center">
-      <div className="mb-6 flex items-center gap-2.5">
-        <span className="grid size-7 place-items-center rounded-nav bg-ink text-white">
-          <HouseIcon className="size-[15px]" />
-        </span>
-        <span className="text-base font-semibold tracking-[-0.01em]">My house</span>
+    <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
+      {/*
+        Decorative, and heavy, so it is never the reason a narrow screen has to
+        scroll before it can reach the form: below `lg` it is not rendered.
+      */}
+      <div className="relative hidden lg:block">
+        <Image
+          src={signInImage}
+          alt=""
+          aria-hidden
+          priority
+          placeholder="blur"
+          sizes="(min-width: 1024px) 52vw, 0px"
+          className="absolute inset-0 size-full object-cover"
+        />
+        {/*
+          Deepened at the foot so the caption holds its contrast wherever the
+          crop lands — the path at the bottom of this photograph is bright, and
+          white text alone does not survive it.
+        */}
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to top, rgba(8,20,13,0.9) 0%, rgba(8,20,13,0.55) 22%, rgba(8,20,13,0.1) 48%, transparent 70%)",
+          }}
+        />
+        <div className="absolute inset-x-0 bottom-0 p-10 text-white">
+          <p className="max-w-[26rem] text-[19px] leading-snug font-medium tracking-[-0.01em]">
+            Every taka in and out of the house, kept in one place, year after year.
+          </p>
+        </div>
       </div>
 
-      <Card className="px-[22px] pt-[22px] pb-6">
-        <h1 className="mb-1 text-[22px] font-semibold tracking-[-0.02em]">{title}</h1>
-        <p className="mb-5 text-[13px] text-muted">{intro}</p>
+      <div className="flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-16">
+        <div className="mx-auto w-full max-w-[380px]">
+          <LogoLockup className="mb-7 h-[104px] w-[101px]" />
+
+          <h1 className="mb-1 text-[26px] font-semibold tracking-[-0.02em]">{title}</h1>
+          <p className="mb-6 text-sm text-muted">{intro}</p>
 
         {done && "message" in onDone ? (
           <p
@@ -91,6 +126,7 @@ export function AuthForm({
                 id={emailId}
                 type="email"
                 autoComplete="email"
+                placeholder="you@example.com"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -98,14 +134,34 @@ export function AuthForm({
             </div>
             <div>
               <Label htmlFor={passwordId}>Password</Label>
-              <Field
-                id={passwordId}
-                type="password"
-                autoComplete={endpoint.includes("sign-in") ? "current-password" : "new-password"}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div className="relative">
+                <Field
+                  id={passwordId}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete={endpoint.includes("sign-in") ? "current-password" : "new-password"}
+                  /* Registering states the rule up front rather than failing on it. */
+                  placeholder={
+                    endpoint.includes("sign-in")
+                      ? "Your password"
+                      : `At least ${MIN_PASSWORD_LENGTH} characters`
+                  }
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-[38px]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((shown) => !shown)}
+                  /* Never submits, and never takes the tab stop between the
+                   * password and the button the form is actually for. */
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute inset-y-0 right-0 grid w-[38px] cursor-pointer place-items-center text-muted-2 transition-colors hover:text-ink"
+                >
+                  {showPassword ? <EyeOffIcon className="size-[17px]" /> : <EyeIcon className="size-[17px]" />}
+                </button>
+              </div>
             </div>
 
             {error ? (
@@ -122,9 +178,10 @@ export function AuthForm({
             </Button>
           </form>
         )}
-      </Card>
 
-      <p className="mt-4 text-center text-[13px] text-muted">{footer}</p>
+          <p className="mt-6 text-[13px] text-muted">{footer}</p>
+        </div>
+      </div>
     </div>
   );
 }

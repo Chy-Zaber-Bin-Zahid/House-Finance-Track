@@ -102,6 +102,37 @@ export async function saveDocument(
   return row;
 }
 
+/**
+ * The object keys a tenant's files live under.
+ *
+ * `documents.tenant_id` cascades, so deleting a tenant takes these rows with it
+ * and leaves the objects in the bucket with nothing left to name them — paid
+ * for, unreachable, and invisible to any later sweep. Read the keys before the
+ * delete, hand them to `removeObjects` after it.
+ */
+export async function documentKeysFor(db: Database, tenantId: number): Promise<string[]> {
+  const rows = await db
+    .select({ objectKey: documents.objectKey })
+    .from(documents)
+    .where(eq(documents.tenantId, tenantId));
+  return rows.map((row) => row.objectKey);
+}
+
+/**
+ * Remove objects whose rows have already gone. Failures are logged rather than
+ * thrown: the rows are the record, and bytes left behind are sweepable, whereas
+ * failing here would report a delete that the database has already committed.
+ */
+export async function removeObjects(keys: string[]): Promise<void> {
+  await Promise.all(
+    keys.map((key) =>
+      objectStore()
+        .delete(key)
+        .catch(() => console.error("Object left in storage after its row was removed", { key })),
+    ),
+  );
+}
+
 export async function removeDocument(db: Database, id: number): Promise<void> {
   const [row] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
   if (!row) throw new NotFound("No such file.");
@@ -153,4 +184,10 @@ export async function openDocument(
   });
 
   return { stream, headers };
+}
+
+/** One document row by id, for naming it before it is removed. */
+export async function documentById(db: Database, id: number): Promise<StoredDocument | null> {
+  const [row] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
+  return row ?? null;
 }

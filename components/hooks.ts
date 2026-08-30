@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   api,
+  type AuditPage,
   type Role,
   type SheetResponse,
   type StoredDocument,
@@ -40,6 +41,25 @@ export function useDocuments(tenantId: number | null) {
     queryKey: ["documents", tenantId],
     queryFn: () => api<{ documents: StoredDocument[] }>(`/api/files?tenantId=${tenantId}`),
     enabled: tenantId !== null,
+  });
+}
+
+/**
+ * The trail, a page at a time. `before` walks backwards by id rather than by
+ * offset, so a line written while someone is reading cannot shift the page
+ * under them and hide a row.
+ */
+export function useAuditLog(options: { before?: number; actor?: string }) {
+  const query = new URLSearchParams();
+  if (options.before) query.set("before", String(options.before));
+  if (options.actor) query.set("actor", options.actor);
+  const search = query.toString();
+
+  return useQuery({
+    queryKey: ["audit", options.before ?? 0, options.actor ?? ""],
+    queryFn: () => api<AuditPage>(`/api/audit${search ? `?${search}` : ""}`),
+    /* A log is read, not watched; refetching on every focus is noise. */
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -103,6 +123,43 @@ export function useEndTenancy() {
   return useMutation({
     mutationFn: ({ id, end }: { id: number; end: { year: number; month: number } }) =>
       api(`/api/tenancies/${id}`, { method: "PATCH", body: JSON.stringify({ end }) }),
+    onSuccess: () => invalidate("tenancies", "sheet"),
+  });
+}
+
+/**
+ * The rent changed from a month on. The server splits the tenancy, so the
+ * tenancy list and the sheet both move under this.
+ */
+export function useChangeRent() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({
+      id,
+      from,
+      expectedRent,
+    }: {
+      id: number;
+      from: { year: number; month: number };
+      expectedRent: number;
+    }) =>
+      api(`/api/tenancies/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ changeRent: { from, expectedRent } }),
+      }),
+    onSuccess: () => invalidate("tenancies", "sheet"),
+  });
+}
+
+/** The figure was mistyped: correct it across every month the tenancy covers. */
+export function useCorrectRent() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, expectedRent }: { id: number; expectedRent: number }) =>
+      api(`/api/tenancies/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ expectedRent }),
+      }),
     onSuccess: () => invalidate("tenancies", "sheet"),
   });
 }

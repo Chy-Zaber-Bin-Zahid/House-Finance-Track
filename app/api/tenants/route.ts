@@ -1,3 +1,4 @@
+import { record } from "@/data/audit";
 import { requireApproved, requireEditor } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
 import { createTenant, listTenants } from "@/data/property";
@@ -14,12 +15,13 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    requireEditor(await currentActor());
+    const actor = requireEditor(await currentActor());
     const body = (await request.json()) as { name?: unknown; phone?: unknown };
     if (typeof body.name !== "string" || body.name.trim() === "") {
       return Response.json({ error: "A tenant needs a name." }, { status: 400 });
     }
     const tenant = await createTenant(db, body.name, typeof body.phone === "string" ? body.phone : "");
+    await record(db, actor, "tenant.created", tenant.name);
     return Response.json({ tenant }, { status: 201 });
   } catch (error) {
     return toResponse(error);

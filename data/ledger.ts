@@ -195,15 +195,20 @@ export async function yearSheet(db: Database, year: number) {
     handovers: allUnits
       .map((unit) => ({
         unitId: unit.id,
-        tenancies: held
-          .filter(
-            (t) =>
-              t.unitId === unit.id &&
-              MONTHS.some((month) => covers(t.period, year, month)),
-          )
-          .map((t) => ({ tenantName: t.tenantName, ...fromPeriod(t.period) })),
+        running: held.filter(
+          (t) => t.unitId === unit.id && MONTHS.some((month) => covers(t.period, year, month)),
+        ),
       }))
-      .filter((h) => h.tenancies.length > 1),
+      /*
+       * Distinct tenants, not distinct tenancies. A rent change splits one
+       * tenancy in two with nobody moving, and counting rows would mark that
+       * unit as having changed hands when it only changed price.
+       */
+      .filter((h) => new Set(h.running.map((t) => t.tenantId)).size > 1)
+      .map((h) => ({
+        unitId: h.unitId,
+        tenancies: h.running.map((t) => ({ tenantName: t.tenantName, ...fromPeriod(t.period) })),
+      })),
   };
 }
 

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TextLink } from "@/components/ui";
 import { AuthForm } from "@/components/auth-form";
 
 export const metadata = { title: "Sign in" };
@@ -13,7 +13,7 @@ export default function SignInPage() {
       onDone={{ redirect: "/" }}
       footer={
         <>
-          No account yet? <Link href="/register">Ask for access</Link>.
+          No account yet? <TextLink href="/register">Ask for access</TextLink>.
         </>
       }
     />

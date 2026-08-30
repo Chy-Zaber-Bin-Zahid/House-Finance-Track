@@ -3,6 +3,7 @@
 @theme {
   /* Type */
   --font-sans: var(--font-figtree), Figtree, system-ui, sans-serif;
+  --font-wordmark: var(--font-wordmark), Montserrat, system-ui, sans-serif;
 
   /* Ink */
   --color-ink: #111315;
@@ -11,6 +12,11 @@
   --color-muted-2: #5c636a;
   --color-slate: #4a5158;
   --color-chevron: #c2c7cb;
+
+  /* Logo — sampled from the mark, so the wordmark and the artwork are the
+   * same greens rather than two that nearly agree. */
+  --color-logo: #1a5b35;
+  --color-logo-leaf: #57b72a;
 
   /* Brand */
   --color-brand: #17835c;

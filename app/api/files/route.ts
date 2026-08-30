@@ -1,3 +1,4 @@
+import { record, tenantName } from "@/data/audit";
 import { requireApproved, requireEditor } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
 import { listDocuments, MAX_UPLOAD_BYTES, saveDocument } from "@/data/files";
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    requireEditor(await currentActor());
+    const actor = requireEditor(await currentActor());
 
     const form = await request.formData();
     const file = form.get("file");
@@ -43,6 +44,13 @@ export async function POST(request: Request) {
       kind,
     );
 
+    await record(
+      db,
+      actor,
+      "document.added",
+      document.name,
+      `${kind === "photo" ? "Photo" : "Document"} for ${await tenantName(db, tenantId)}`,
+    );
     return Response.json({ document }, { status: 201 });
   } catch (error) {
     return toResponse(error);

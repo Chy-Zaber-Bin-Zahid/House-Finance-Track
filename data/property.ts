@@ -1,11 +1,12 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { Database } from "@/db/client";
 import { rentEntries, tenancies, tenants, units } from "@/db/schema";
 import { NotFound, StillReferenced } from "./errors";
+import { documentKeysFor, removeObjects } from "./files";
 import { requireWritableYear } from "./guard";
 import type { Actor } from "./session";
 import { MONTH_NAMES } from "@/lib/seed";
-import { BackwardsPeriod, fromPeriod, ordinal, toPeriod, type MonthRef } from "./period";
+import { BackwardsPeriod, fromPeriod, monthBefore, ordinal, toPeriod, type MonthRef } from "./period";
 
 /**
  * Units, tenants, and the tenancies that join them. Kept separate on purpose:
@@ -83,10 +84,20 @@ export async function updateTenant(
 }
 
 export async function deleteTenant(db: Database, id: number) {
+  /*
+   * Read the keys first. The delete below cascades the document rows away, and
+   * once they are gone nothing in the database names the objects any more.
+   */
+  const keys = await documentKeysFor(db, id);
+
   await guardReferences("tenant", async () => {
     const deleted = await db.delete(tenants).where(eq(tenants.id, id)).returning();
     if (deleted.length === 0) throw new NotFound("No such tenant.");
   });
+
+  /* Only once the tenant is actually gone: a tenant still holding a tenancy is
+   * refused above, and their files must survive that refusal untouched. */
+  await removeObjects(keys);
 }
 
 export type TenancyInput = {
@@ -195,6 +206,109 @@ export async function endTenancy(db: Database, id: number, end: MonthRef, actor?
     if (cause?.constraint_name === "tenancies_no_overlapping_period") throw new OverlappingTenancy();
     throw error;
   }
+}
+
+export class RentChangeOutsideTenancy extends Error {
+  constructor() {
+    super("That month is not one this tenancy covers.");
+    this.name = "RentChangeOutsideTenancy";
+  }
+}
+
+/**
+ * Correct what a tenancy charges, leaving the months it covers alone.
+ *
+ * Not year-scoped, and deliberately so. `expectedRent` fills the placeholder on
+ * the month screen and nothing else — no recorded amount reads from it — so
+ * fixing a figure that was mistyped is the same kind of edit as fixing a
+ * misspelled name: it should apply everywhere the tenancy is read, closed years
+ * included. Use `changeRentFrom` when the rent genuinely changed from some
+ * month on; this one reads as though the new figure always applied.
+ */
+export async function setExpectedRent(db: Database, id: number, expectedRent: number) {
+  const [row] = await db
+    .update(tenancies)
+    .set({ expectedRent })
+    .where(eq(tenancies.id, id))
+    .returning();
+  if (!row) throw new NotFound("No such tenancy.");
+  return row;
+}
+
+/**
+ * The rent changed from a given month — up or down, any month, as often as it
+ * needs to.
+ *
+ * A tenancy charges one figure for as long as it runs, so a change is a second
+ * tenancy rather than an edit: the old one is shortened to the month before,
+ * and a new one takes the rest of the period at the new figure. Same unit, same
+ * tenant, no gap between them, and the months already recorded keep the amounts
+ * they were recorded with.
+ *
+ * Rent entered for the months that move goes with them. Those months belong to
+ * the new tenancy now, and an amount left behind on the old one would still
+ * count toward the year total with no cell able to show it — the same money
+ * falling out of view that `endTenancy` refuses to allow.
+ *
+ * Changing from the start month is not a split at all: there is no earlier
+ * stretch to keep, so it settles into a plain correction.
+ */
+export async function changeRentFrom(
+  db: Database,
+  id: number,
+  from: MonthRef,
+  expectedRent: number,
+  actor?: Actor,
+) {
+  const [existing] = await db.select().from(tenancies).where(eq(tenancies.id, id)).limit(1);
+  if (!existing) throw new NotFound("No such tenancy.");
+
+  const { start, end } = fromPeriod(existing.period);
+  if (end && ordinal(from) > ordinal(end)) throw new RentChangeOutsideTenancy();
+
+  /* At or before the start there is nothing to split off — the new figure
+   * applies to every month this tenancy has. */
+  if (ordinal(from) <= ordinal(start)) {
+    const row = await setExpectedRent(db, id, expectedRent);
+    return { tenancy: row, split: false as const };
+  }
+
+  /* Which months belong to which tenancy is year-scoped, exactly as opening or
+   * ending one is. Only the stretch from the change onward moves. */
+  if (actor) {
+    for (const year of yearsTouched(from, end)) requireWritableYear(actor, year);
+  }
+
+  return db.transaction(async (tx) => {
+    /* Shorten first, then open the new one: the exclusion constraint sees no
+     * overlap at any point, so it never has to be deferred. */
+    await tx
+      .update(tenancies)
+      .set({ period: toPeriod(start, monthBefore(from)) })
+      .where(eq(tenancies.id, id));
+
+    const [created] = await tx
+      .insert(tenancies)
+      .values({
+        unitId: existing.unitId,
+        tenantId: existing.tenantId,
+        period: toPeriod(from, end),
+        expectedRent,
+      })
+      .returning();
+
+    await tx
+      .update(rentEntries)
+      .set({ tenancyId: created.id })
+      .where(
+        and(
+          eq(rentEntries.tenancyId, id),
+          sql`${rentEntries.year} * 12 + ${rentEntries.month} >= ${ordinal(from)}`,
+        ),
+      );
+
+    return { tenancy: created, split: true as const };
+  });
 }
 
 export async function deleteTenancy(db: Database, id: number, actor?: Actor) {

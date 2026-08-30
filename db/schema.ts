@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   customType,
+  index,
   integer,
   pgEnum,
   pgTable,
@@ -114,6 +115,34 @@ export const billTypes = pgTable("bill_types", {
   /** Retiring flips this off; reactivating flips it back on. */
   active: boolean("active").notNull().default(true),
 });
+
+/**
+ * What was done, by whom, and when.
+ *
+ * Written alongside the change rather than derived from it: the sheet records
+ * what a figure *is*, and no amount of reading it back says who moved it or
+ * what it was before. Only the owner reads this.
+ *
+ * The actor's email is copied in rather than joined. An account can be removed,
+ * and a log that forgets who did something the moment their account goes is not
+ * a log — so `account_id` is the live link and `actor_email` is the record.
+ */
+export const auditEvents = pgTable(
+  "audit_events",
+  {
+    id: serial("id").primaryKey(),
+    accountId: integer("account_id").references(() => accounts.id, { onDelete: "set null" }),
+    actorEmail: text("actor_email").notNull(),
+    /** A stable dotted key, e.g. `tenancy.rent_changed`. Read by code. */
+    action: text("action").notNull(),
+    /** What it happened to, in the words the screen uses, e.g. `F1(B) — Anwar Hossain`. */
+    subject: text("subject").notNull(),
+    /** The change itself, already phrased for a reader. */
+    detail: text("detail").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("audit_events_recent").on(t.createdAt.desc())],
+);
 
 export const rentEntries = pgTable(
   "rent_entries",

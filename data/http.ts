@@ -4,7 +4,7 @@ import { AccessDenied, NotFound, StillReferenced } from "./errors";
 import { UploadTooLarge } from "./files";
 import { WeakPassword } from "./passwords";
 import { BackwardsPeriod } from "./period";
-import { OverlappingTenancy } from "./property";
+import { OverlappingTenancy, RentChangeOutsideTenancy } from "./property";
 import { verifySession, type Actor } from "./session";
 
 export const SESSION_COOKIE = "house_session";
@@ -64,7 +64,11 @@ export function toResponse(error: unknown): Response {
   if (error instanceof StillReferenced || error instanceof OverlappingTenancy) {
     return Response.json({ error: error.message }, { status: 409 });
   }
-  if (error instanceof WeakPassword || error instanceof BackwardsPeriod) {
+  if (
+    error instanceof WeakPassword ||
+    error instanceof BackwardsPeriod ||
+    error instanceof RentChangeOutsideTenancy
+  ) {
     return Response.json({ error: error.message }, { status: 400 });
   }
   if (error instanceof UploadTooLarge) {

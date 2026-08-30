@@ -8,6 +8,11 @@ describe("formatAmount", () => {
     expect(formatAmount(115_100)).toBe("৳115,100");
   });
 
+  it("keeps the minus in front of the currency when a month costs more than it earns", () => {
+    expect(formatAmount(-1_380)).toBe("-৳1,380");
+    expect(formatAmount(-500, "$")).toBe("-$500");
+  });
+
   it("honours a currency the caller supplies", () => {
     expect(formatAmount(500, "$")).toBe("$500");
     expect(formatAmount(0, "$")).toBe("0");

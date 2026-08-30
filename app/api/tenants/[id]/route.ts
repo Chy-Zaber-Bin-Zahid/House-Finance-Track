@@ -1,3 +1,4 @@
+import { record } from "@/data/audit";
 import { requireApproved, requireEditor } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
 import { deleteTenant, tenantHistory, updateTenant } from "@/data/property";
@@ -14,10 +15,12 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    requireEditor(await currentActor());
+    const actor = requireEditor(await currentActor());
     const id = Number((await context.params).id);
     const body = (await request.json()) as { name?: string; phone?: string; notes?: string };
-    return Response.json({ tenant: await updateTenant(db, id, body) });
+    const tenant = await updateTenant(db, id, body);
+    await record(db, actor, "tenant.updated", tenant.name, Object.keys(body).join(", "));
+    return Response.json({ tenant });
   } catch (error) {
     return toResponse(error);
   }
@@ -25,8 +28,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    requireEditor(await currentActor());
-    await deleteTenant(db, Number((await context.params).id));
+    const actor = requireEditor(await currentActor());
+    const id = Number((await context.params).id);
+    const { tenant } = await tenantHistory(db, id);
+    await deleteTenant(db, id);
+    await record(db, actor, "tenant.removed", tenant.name);
     return Response.json({ ok: true });
   } catch (error) {
     return toResponse(error);

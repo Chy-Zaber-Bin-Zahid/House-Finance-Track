@@ -5,6 +5,7 @@ import type { Database } from "@/db/client";
 import { NotFound, StillReferenced } from "./errors";
 import { BackwardsPeriod } from "./period";
 import {
+  changeRentFrom,
   createTenancy,
   createTenant,
   createUnit,
@@ -13,6 +14,8 @@ import {
   endTenancy,
   listTenancies,
   OverlappingTenancy,
+  RentChangeOutsideTenancy,
+  setExpectedRent,
   tenantHistory,
 } from "./property";
 
@@ -207,5 +210,125 @@ describe("a tenancy cannot end before it starts", () => {
         expectedRent: 11000,
       }),
     ).rejects.toThrow(BackwardsPeriod);
+  });
+});
+
+describe("rent is not fixed", () => {
+  async function letAt(rent: number, end: { year: number; month: number } | null = null) {
+    const unit = await createUnit(database, "F1(B)", "back");
+    const tenant = await createTenant(database, "Anwar");
+    const tenancy = await createTenancy(database, {
+      unitId: unit.id,
+      tenantId: tenant.id,
+      start: { year: 2026, month: 1 },
+      end,
+      expectedRent: rent,
+    });
+    return { unit, tenant, tenancy };
+  }
+
+  it("splits the tenancy so earlier months keep the figure they were let at", async () => {
+    const { tenancy } = await letAt(6000);
+
+    const result = await changeRentFrom(database, tenancy.id, { year: 2026, month: 7 }, 7000);
+    expect(result.split).toBe(true);
+
+    const held = await listTenancies(database);
+    expect(held).toHaveLength(2);
+
+    const before = held.find((t) => t.id === tenancy.id);
+    const after = held.find((t) => t.id === result.tenancy.id);
+    expect(before).toMatchObject({ expectedRent: 6000, end: { year: 2026, month: 6 } });
+    expect(after).toMatchObject({ expectedRent: 7000, start: { year: 2026, month: 7 }, end: null });
+  });
+
+  it("leaves no gap between the old figure and the new one", async () => {
+    const { tenancy } = await letAt(6000);
+    const result = await changeRentFrom(database, tenancy.id, { year: 2026, month: 7 }, 7000);
+
+    const held = await listTenancies(database);
+    const before = held.find((t) => t.id === tenancy.id)!;
+    const after = held.find((t) => t.id === result.tenancy.id)!;
+    /* June ends the first, July opens the second: every month has exactly one. */
+    expect(before.end).toEqual({ year: 2026, month: 6 });
+    expect(after.start).toEqual({ year: 2026, month: 7 });
+  });
+
+  it("goes down as readily as up", async () => {
+    const { tenancy } = await letAt(6000);
+    const result = await changeRentFrom(database, tenancy.id, { year: 2026, month: 4 }, 4500);
+
+    const held = await listTenancies(database);
+    expect(held.find((t) => t.id === result.tenancy.id)?.expectedRent).toBe(4500);
+  });
+
+  it("changes again within the same year", async () => {
+    const { tenancy } = await letAt(6000);
+    const second = await changeRentFrom(database, tenancy.id, { year: 2026, month: 4 }, 6500);
+    const third = await changeRentFrom(database, second.tenancy.id, { year: 2026, month: 9 }, 7000);
+
+    const held = await listTenancies(database);
+    expect(held).toHaveLength(3);
+    expect(held.find((t) => t.id === third.tenancy.id)).toMatchObject({
+      expectedRent: 7000,
+      start: { year: 2026, month: 9 },
+    });
+  });
+
+  it("carries rent already recorded across to the tenancy that now owns those months", async () => {
+    const { tenancy } = await letAt(6000);
+    await db.insert(rentEntries).values([
+      { tenancyId: tenancy.id, year: 2026, month: 3, amount: 6000, status: "paid" },
+      { tenancyId: tenancy.id, year: 2026, month: 8, amount: 7000, status: "paid" },
+    ]);
+
+    const result = await changeRentFrom(database, tenancy.id, { year: 2026, month: 7 }, 7000);
+
+    const history = await tenantHistory(database, (await listTenancies(database))[0].tenantId);
+    const old = history.tenancies.find((t) => t.id === tenancy.id);
+    const fresh = history.tenancies.find((t) => t.id === result.tenancy.id);
+    /* March stayed put; August moved with the months it belongs to. */
+    expect(old?.entries.map((e) => e.month)).toEqual([3]);
+    expect(fresh?.entries.map((e) => e.month)).toEqual([8]);
+    /* Neither amount was rewritten by the change. */
+    expect(old?.collected).toBe(6000);
+    expect(fresh?.collected).toBe(7000);
+  });
+
+  it("changing from the start month is a correction, not a split", async () => {
+    const { tenancy } = await letAt(6000);
+
+    const result = await changeRentFrom(database, tenancy.id, { year: 2026, month: 1 }, 6500);
+
+    expect(result.split).toBe(false);
+    const held = await listTenancies(database);
+    expect(held).toHaveLength(1);
+    expect(held[0].expectedRent).toBe(6500);
+  });
+
+  it("refuses a month the tenancy had already ended by", async () => {
+    const { tenancy } = await letAt(6000, { year: 2026, month: 6 });
+
+    await expect(
+      changeRentFrom(database, tenancy.id, { year: 2026, month: 9 }, 7000),
+    ).rejects.toBeInstanceOf(RentChangeOutsideTenancy);
+  });
+
+  it("corrects a mistyped figure across every month without touching the period", async () => {
+    const { tenancy } = await letAt(6000, { year: 2026, month: 6 });
+
+    await setExpectedRent(database, tenancy.id, 5500);
+
+    const held = await listTenancies(database);
+    expect(held).toHaveLength(1);
+    expect(held[0]).toMatchObject({
+      expectedRent: 5500,
+      start: { year: 2026, month: 1 },
+      end: { year: 2026, month: 6 },
+    });
+  });
+
+  it("refuses to correct a tenancy that is not there", async () => {
+    await expect(setExpectedRent(database, 9999, 5500)).rejects.toBeInstanceOf(NotFound);
   });
 });

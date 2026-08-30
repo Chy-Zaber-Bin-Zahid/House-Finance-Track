@@ -1,3 +1,4 @@
+import { record } from "@/data/audit";
 import { requireApproved, requireEditor } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
 import { createBillType, listBillTypes } from "@/data/ledger";
@@ -14,12 +15,14 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    requireEditor(await currentActor());
+    const actor = requireEditor(await currentActor());
     const body = (await request.json()) as { name?: unknown };
     if (typeof body.name !== "string" || body.name.trim() === "") {
       return Response.json({ error: "A bill needs a name." }, { status: 400 });
     }
-    return Response.json({ billType: await createBillType(db, body.name) }, { status: 201 });
+    const billType = await createBillType(db, body.name);
+    await record(db, actor, "billType.created", billType.name);
+    return Response.json({ billType }, { status: 201 });
   } catch (error) {
     return toResponse(error);
   }

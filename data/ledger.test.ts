@@ -17,7 +17,7 @@ import {
   yearsWithData,
   yearTotals,
 } from "./ledger";
-import { createTenancy, createTenant, createUnit, endTenancy } from "./property";
+import { changeRentFrom, createTenancy, createTenant, createUnit, endTenancy } from "./property";
 
 const { db, close } = testDb();
 const database = db as unknown as Database;
@@ -173,5 +173,46 @@ describe("the sheet reads the year the seed produced", () => {
     expect(sheet.units).toEqual([]);
     expect(sheet.billTypes).toEqual([]);
     expect(sheet.months).toHaveLength(12);
+  });
+});
+
+describe("the sheet marks a unit that changed hands", () => {
+  async function aUnitLetTo(name: string) {
+    const unit = await createUnit(database, "F1(B)", "back");
+    const tenant = await createTenant(database, name);
+    const tenancy = await createTenancy(database, {
+      unitId: unit.id,
+      tenantId: tenant.id,
+      start: { year: 2026, month: 1 },
+      end: null,
+      expectedRent: 6000,
+    });
+    return { unit, tenant, tenancy };
+  }
+
+  it("marks the unit when a second tenant took it over", async () => {
+    const { unit, tenancy } = await aUnitLetTo("Anwar");
+    await endTenancy(database, tenancy.id, { year: 2026, month: 6 });
+    const rehana = await createTenant(database, "Rehana");
+    await createTenancy(database, {
+      unitId: unit.id,
+      tenantId: rehana.id,
+      start: { year: 2026, month: 7 },
+      end: null,
+      expectedRent: 6500,
+    });
+
+    const sheet = await yearSheet(database, 2026);
+    expect(sheet.handovers.map((h) => h.unitId)).toEqual([unit.id]);
+  });
+
+  it("leaves it unmarked when only the rent changed", async () => {
+    const { tenancy } = await aUnitLetTo("Anwar");
+    await changeRentFrom(database, tenancy.id, { year: 2026, month: 7 }, 7000);
+
+    /* Two tenancies now, one tenant throughout — nobody moved, so the sheet
+     * must not claim the unit changed hands. */
+    const sheet = await yearSheet(database, 2026);
+    expect(sheet.handovers).toEqual([]);
   });
 });

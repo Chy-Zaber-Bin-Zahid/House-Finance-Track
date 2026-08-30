@@ -1,3 +1,4 @@
+import { monthLabel, record } from "@/data/audit";
 import { requireApproved, requireEditor } from "@/data/guard";
 import { currentActor, toResponse } from "@/data/http";
 import { createTenancy, listTenancies } from "@/data/property";
@@ -54,6 +55,14 @@ export async function POST(request: Request) {
         expectedRent: typeof body.expectedRent === "number" ? body.expectedRent : 0,
       },
       actor,
+    );
+    const named = (await listTenancies(db)).find((t) => t.id === tenancy.id);
+    await record(
+      db,
+      actor,
+      "tenancy.created",
+      named ? `${named.unitLabel} — ${named.tenantName}` : `Tenancy #${tenancy.id}`,
+      `From ${monthLabel(body.start.year, body.start.month)} at ${tenancy.expectedRent}`,
     );
     /* The raw row, not the enriched shape GET returns — named differently so a
      * caller cannot reach for fields this response never carried. */

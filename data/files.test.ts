@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { documents } from "@/db/schema";
 import { testDb, acquireSuiteLock, releaseSuiteLock, truncateAll } from "@/test/db";
 import type { Database } from "@/db/client";
-import { NotFound } from "./errors";
+import { NotFound, StillReferenced } from "./errors";
 import {
   listDocuments,
   MAX_UPLOAD_BYTES,
@@ -12,7 +12,7 @@ import {
   saveDocument,
   UploadTooLarge,
 } from "./files";
-import { createTenant, deleteTenant } from "./property";
+import { createTenancy, createTenant, createUnit, deleteTenant } from "./property";
 import { MemoryStore, useObjectStore } from "./storage";
 
 const { db, close } = testDb();
@@ -186,8 +186,44 @@ describe("removing", () => {
       contentType: "application/pdf",
       bytes: bytes("x"),
     });
+    await saveDocument(
+      database,
+      tenant.id,
+      { name: "face.png", contentType: "image/png", bytes: bytes("y") },
+      "photo",
+    );
+    expect(store.objects.size).toBe(2);
 
     await deleteTenant(database, tenant.id);
+
     expect(await db.select().from(documents)).toHaveLength(0);
+    /*
+     * The rows cascade on their own; the objects do not. Without this the
+     * bucket keeps paying for bytes nothing can name or reach.
+     */
+    expect(store.objects.size).toBe(0);
+  });
+
+  it("leaves the files alone when the tenant cannot be deleted", async () => {
+    const tenant = await aTenant();
+    const unit = await createUnit(database, "F1(B)", "back");
+    await createTenancy(database, {
+      unitId: unit.id,
+      tenantId: tenant.id,
+      start: { year: 2026, month: 1 },
+      end: null,
+      expectedRent: 6000,
+    });
+    await saveDocument(database, tenant.id, {
+      name: "lease.pdf",
+      contentType: "application/pdf",
+      bytes: bytes("x"),
+    });
+
+    await expect(deleteTenant(database, tenant.id)).rejects.toBeInstanceOf(StillReferenced);
+
+    /* The delete was refused, so the tenant still holds their documents. */
+    expect(await listDocuments(database, tenant.id)).toHaveLength(1);
+    expect(store.objects.size).toBe(1);
   });
 });

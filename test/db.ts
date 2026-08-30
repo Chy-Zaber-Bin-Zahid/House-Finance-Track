@@ -14,6 +14,7 @@ export function testDb() {
 }
 
 const TABLES = [
+  "audit_events",
   "rent_entries",
   "bill_entries",
   "tenancies",

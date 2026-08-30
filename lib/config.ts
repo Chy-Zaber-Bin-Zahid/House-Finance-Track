@@ -4,7 +4,7 @@
  */
 export const HOUSE_CONFIG = {
   currency: "৳",
-  houseName: "My house",
+  houseName: "House Finance",
   yearLabel: "2026",
 } as const;
 

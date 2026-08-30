@@ -47,6 +47,26 @@ export function Button({
   return <button className={buttonClasses(variant, className)} {...props} />;
 }
 
+/**
+ * A link inside a sentence.
+ *
+ * Preflight strips the underline and the colour from every anchor, which leaves
+ * a link in running text looking exactly like the words around it. Nav links
+ * have position and hover to give them away; a link in a paragraph has neither,
+ * so it says so itself.
+ */
+export function TextLink({ className, ...props }: ComponentProps<typeof Link>) {
+  return (
+    <Link
+      className={cn(
+        "font-medium text-brand underline decoration-brand/40 underline-offset-[3px] transition-colors hover:text-brand-hover hover:decoration-brand-hover",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 /** A link that carries a button's weight — real navigation, same shape. */
 export function ButtonLink({
   variant = "secondary",
@@ -116,7 +136,12 @@ export function PageHeading({
         <h1 className="mb-[5px] text-[30px] font-semibold tracking-[-0.022em]">{title}</h1>
         {subtitle ? <p className="text-[15px] text-muted">{subtitle}</p> : null}
       </div>
-      {actions ? <div className="ml-auto flex items-center gap-[9px]">{actions}</div> : null}
+      {actions ? (
+        /* `sm:ml-auto`, not `ml-auto`: once the row wraps on a phone the
+         * actions start at the left edge under the title rather than being
+         * shoved against the right. */
+        <div className="flex flex-wrap items-center gap-[9px] sm:ml-auto">{actions}</div>
+      ) : null}
     </div>
   );
 }

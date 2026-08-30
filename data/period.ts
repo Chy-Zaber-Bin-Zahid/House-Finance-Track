@@ -22,6 +22,11 @@ export function ordinal({ year, month }: MonthRef): number {
   return year * 12 + month;
 }
 
+/** The month before a given one, for splitting a period without leaving a gap. */
+export function monthBefore({ year, month }: MonthRef): MonthRef {
+  return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
+}
+
 function firstOf({ year, month }: MonthRef): string {
   return `${year}-${String(month).padStart(2, "0")}-01`;
 }

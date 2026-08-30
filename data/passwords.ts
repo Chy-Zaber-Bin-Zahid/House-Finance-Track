@@ -1,4 +1,5 @@
 import argon2 from "argon2";
+import { MIN_PASSWORD_LENGTH } from "@/lib/limits";
 
 /**
  * OWASP ranks argon2id first for password storage. Node has no native Argon2 in
@@ -13,8 +14,9 @@ const OPTIONS = {
   parallelism: 4,
 } as const;
 
-/** Short passwords are the one thing argon2 cannot protect against. */
-export const MIN_PASSWORD_LENGTH = 12;
+/* Defined in lib/limits so the sign-up form can state the rule without
+ * importing argon2 along with it. */
+export { MIN_PASSWORD_LENGTH } from "@/lib/limits";
 
 export class WeakPassword extends Error {
   constructor() {

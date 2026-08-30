@@ -47,6 +47,20 @@ export type Tenancy = {
   end: MonthRef | null;
 };
 
+export type AuditEvent = {
+  id: number;
+  actorEmail: string;
+  /** False once the account behind the email is gone; the line still stands. */
+  stillAnAccount: boolean;
+  action: string;
+  label: string;
+  subject: string;
+  detail: string;
+  createdAt: string;
+};
+
+export type AuditPage = { events: AuditEvent[]; more: boolean; actors: string[] };
+
 export type StoredDocument = {
   id: number;
   tenantId: number;

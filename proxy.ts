@@ -31,5 +31,8 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  /* The app icons are served by Next from app/icon.png and app/apple-icon.png.
+   * Redirecting them leaves the sign-in page — the one page a signed-out
+   * visitor sees — with no icon in its tab. */
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png).*)"],
 };

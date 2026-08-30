@@ -7,17 +7,7 @@ import { DocumentPanel } from "@/components/document-panel";
 import { useDocuments, useInvalidate, useMe } from "@/components/hooks";
 import { CheckIcon, ChevronLeftIcon } from "@/components/icons";
 import { ImageSlot } from "@/components/image-slot";
-import {
-  ButtonLink,
-  Card,
-  Field,
-  Label,
-  Loading,
-  Notice,
-  Pill,
-  TextArea,
-  UpcomingDot,
-} from "@/components/ui";
+import { ButtonLink, Card, Field, Label, Loading, Notice, Pill, TextArea, TextLink, UpcomingDot } from "@/components/ui";
 import { api, ApiError, type MonthRef, type StoredDocument } from "@/lib/api";
 import { HOUSE_CONFIG } from "@/lib/config";
 import { formatAmount, parseAmount } from "@/lib/format";
@@ -72,9 +62,9 @@ export function TenantScreen({ tenantId }: { tenantId: number }) {
   if (history.error) {
     return (
       <section aria-label="Tenant">
-        <ButtonLink href="/units" className="mb-5">
+        <ButtonLink href="/tenants" className="mb-5">
           <ChevronLeftIcon className="size-3.5" />
-          All units
+          All tenants
         </ButtonLink>
         <Notice tone="error">
           {history.error instanceof ApiError ? history.error.message : "Could not load this tenant."}
@@ -101,9 +91,9 @@ export function TenantScreen({ tenantId }: { tenantId: number }) {
 
   return (
     <section aria-label="Tenant">
-      <ButtonLink href="/units" className="mb-5">
+      <ButtonLink href="/tenants" className="mb-5">
         <ChevronLeftIcon className="size-3.5" />
-        All units
+        All tenants
       </ButtonLink>
 
       {saveError ? (
@@ -137,6 +127,7 @@ export function TenantScreen({ tenantId }: { tenantId: number }) {
               <Field
                 id={nameId}
                 value={name}
+                placeholder="Anwar Hossain"
                 disabled={!editable}
                 onChange={(e) => setName(e.target.value)}
                 onBlur={() => name !== tenant.name && save({ name })}
@@ -148,6 +139,7 @@ export function TenantScreen({ tenantId }: { tenantId: number }) {
                 id={phoneId}
                 type="tel"
                 value={phone}
+                placeholder="01711 204 866"
                 disabled={!editable}
                 onChange={(e) => setPhone(e.target.value)}
                 onBlur={() => phone !== tenant.phone && save({ phone })}
@@ -180,7 +172,7 @@ export function TenantScreen({ tenantId }: { tenantId: number }) {
             <Card className="px-[22px] py-6">
               <p className="text-center text-[13px] text-muted">
                 This tenant has never been assigned to a unit. Assign them on{" "}
-                <Link href="/units">Units &amp; tenants</Link>.
+                <TextLink href="/tenants">Tenants</TextLink>.
               </p>
             </Card>
           ) : (

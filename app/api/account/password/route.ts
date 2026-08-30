@@ -1,4 +1,5 @@
 import { changePassword } from "@/data/accounts";
+import { record } from "@/data/audit";
 import { requireApproved } from "@/data/guard";
 import { currentActor, sessionToken, toResponse } from "@/data/http";
 import { consume, PASSWORD_CHANGE_PER_ACCOUNT } from "@/data/rate-limit";
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
     const token = await sessionToken();
     await destroyOtherSessions(db, actor.accountId, hashToken(token ?? ""));
 
+    await record(db, actor, "account.password_changed", actor.email, "Other sessions signed out");
     return Response.json({ ok: true });
   } catch (error) {
     return toResponse(error);

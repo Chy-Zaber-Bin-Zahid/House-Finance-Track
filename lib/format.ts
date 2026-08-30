@@ -2,7 +2,11 @@ import { HOUSE_CONFIG } from "@/lib/config";
 
 /** Zero reads as a bare "0" — the sheet has a lot of them. */
 export function formatAmount(n: number, currency: string = HOUSE_CONFIG.currency): string {
-  return n === 0 ? "0" : currency + n.toLocaleString("en-US");
+  if (n === 0) return "0";
+  /* The minus sign goes in front of the currency, not between it and the
+   * digits: a month whose bills beat its rent reads "-৳1,380", never
+   * "৳-1,380". */
+  return (n < 0 ? "-" : "") + currency + Math.abs(n).toLocaleString("en-US");
 }
 
 /** Accepts anything a person might type into a money field. */
