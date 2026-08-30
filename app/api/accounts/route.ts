@@ -2,13 +2,13 @@ import { register } from "@/data/accounts";
 import { listAccounts } from "@/data/approvals";
 import { requireOwner } from "@/data/guard";
 import { addressOf, currentActor, toResponse } from "@/data/http";
-import { consume, REGISTER_PER_ADDRESS } from "@/data/rate-limit";
+import { consumePerCaller, REGISTER_PER_ADDRESS } from "@/data/rate-limit";
 import { db } from "@/db/client";
 
 /** Open to anyone: this is how a family member asks for access. */
 export async function POST(request: Request) {
   try {
-    if (!consume(`register:${addressOf(request)}`, REGISTER_PER_ADDRESS)) {
+    if (!consumePerCaller("register", addressOf(request), REGISTER_PER_ADDRESS)) {
       return Response.json({ error: "Too many attempts. Try again later." }, { status: 429 });
     }
 

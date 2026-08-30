@@ -99,7 +99,9 @@ describe("the endpoints open to anyone are rate limited", () => {
   ];
   for (const [route, limiter] of open) {
     it(`${route} limits attempts`, () => {
-      expect(readFileSync(limiter, "utf8")).toMatch(/consume\(/);
+      /* Either entry point: `consumePerCaller` is `consume` keyed on the
+       * caller, and skips itself where the caller cannot be identified. */
+      expect(readFileSync(limiter, "utf8")).toMatch(/consume(PerCaller)?\(/);
     });
   }
 });

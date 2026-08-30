@@ -79,18 +79,24 @@ export function toResponse(error: unknown): Response {
 }
 
 /**
- * The caller's address, for rate limiting.
+ * The caller's address, for rate limiting — or `null` when this deployment has
+ * no way to tell callers apart.
  *
  * `x-forwarded-for` is written by the client, and a proxy appends rather than
  * replaces - so the first element is whatever the caller put there. Reading it
  * blindly lets anyone mint a fresh rate-limit bucket per request. Only the hops
  * a deployment actually declares are trusted; with none declared the header is
  * ignored entirely.
+ *
+ * `null` rather than a stand-in string. A stand-in is a perfectly good map key,
+ * so every caller shared one bucket and "five tries each" quietly became "five
+ * tries between everyone" — which a stranger could spend in seconds to lock the
+ * whole household out of sign-in.
  */
-export function addressOf(request: Request): string {
+export function addressOf(request: Request): string | null {
   const hops = Number(process.env.TRUSTED_PROXY_HOPS ?? "0");
-  if (!Number.isInteger(hops) || hops < 1) return "direct";
+  if (!Number.isInteger(hops) || hops < 1) return null;
 
   const chain = request.headers.get("x-forwarded-for")?.split(",").map((p) => p.trim()) ?? [];
-  return chain.at(-hops) || "direct";
+  return chain.at(-hops) || null;
 }

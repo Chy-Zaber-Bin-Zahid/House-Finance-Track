@@ -41,6 +41,31 @@ export function consume(key: string, limit: Limit, now = Date.now()): boolean {
   return true;
 }
 
+/**
+ * A limit keyed on *who* is calling, applied only where that is actually known.
+ *
+ * With no address every caller collapses into a single bucket and the limit
+ * stops protecting accounts and starts denying service to them. Where the
+ * caller cannot be identified this allows the request: the bound is left to the
+ * limits that key on something real — the email, the account — and to whatever
+ * sits in front of the app. A limit that cannot tell callers apart must not
+ * punish one for another's behaviour.
+ */
+export function consumePerCaller(
+  prefix: string,
+  address: string | null,
+  limit: Limit,
+  now = Date.now(),
+): boolean {
+  if (address === null) return true;
+  return consume(`${prefix}:${address}`, limit, now);
+}
+
+/** Undoes a `consumePerCaller`, for a caller that turned out to be legitimate. */
+export function resetPerCaller(prefix: string, address: string | null): void {
+  if (address !== null) reset(`${prefix}:${address}`);
+}
+
 /** Called after a success, so a legitimate sign-in clears the failure count. */
 export function reset(key: string): void {
   windows.delete(key);

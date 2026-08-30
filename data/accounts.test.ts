@@ -165,3 +165,53 @@ describe("changing a password", () => {
     expect((await signIn(database, "brother@example.com", "a-different-long-password", ADDRESS)).ok).toBe(true);
   });
 });
+
+describe("a limit that cannot tell callers apart", () => {
+  /*
+   * `addressOf` returns null when no proxy depth is declared, which is the
+   * default. Keying the per-address limit on a stand-in string put every
+   * caller in one bucket, so twenty failures from a stranger locked the whole
+   * household out of sign-in — the limit denying service instead of defending
+   * against it.
+   */
+  it("never lets one caller's failures lock out another", async () => {
+    await anApprovedAccount();
+
+    for (let i = 0; i < 25; i += 1) {
+      await signIn(database, `stranger${i}@example.com`, "wrong-password", null);
+    }
+
+    expect((await signIn(database, "brother@example.com", GOOD, null)).ok).toBe(true);
+  });
+
+  it("still limits by address where the deployment can tell callers apart", async () => {
+    await anApprovedAccount();
+
+    /* Twenty failures spread over emails, so only the address count is spent. */
+    for (let i = 0; i < 20; i += 1) {
+      await signIn(database, `stranger${i}@example.com`, "wrong-password", "203.0.113.7");
+    }
+
+    expect(await signIn(database, "brother@example.com", GOOD, "203.0.113.7")).toEqual({
+      ok: false,
+      reason: "throttled",
+    });
+    /* Another address is untouched by it. */
+    expect((await signIn(database, "brother@example.com", GOOD, "203.0.113.8")).ok).toBe(true);
+  });
+
+  it("clears the address count too when someone proves who they are", async () => {
+    await anApprovedAccount();
+
+    for (let i = 0; i < 19; i += 1) {
+      await signIn(database, `stranger${i}@example.com`, "wrong-password", ADDRESS);
+    }
+    expect((await signIn(database, "brother@example.com", GOOD, ADDRESS)).ok).toBe(true);
+
+    /* Nineteen more would have passed the old ceiling had the success not reset it. */
+    for (let i = 0; i < 19; i += 1) {
+      await signIn(database, `other${i}@example.com`, "wrong-password", ADDRESS);
+    }
+    expect((await signIn(database, "brother@example.com", GOOD, ADDRESS)).ok).toBe(true);
+  });
+});
